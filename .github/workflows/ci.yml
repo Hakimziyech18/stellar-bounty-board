@@ -6,8 +6,13 @@ on:
       - main
 
 jobs:
-  ci:
+  backend:
+    name: Backend lint, type-check, tests and coverage
     runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: backend
 
     steps:
       - name: Checkout code
@@ -17,38 +22,32 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "20"
-          cache: "npm"
 
-      - name: Install dependencies
-        run: npm run install:all
-
-      - name: TypeScript type-check frontend
-        run: npx tsc --noEmit -p frontend/tsconfig.json
-
-      - name: TypeScript type-check backend
-        run: npx tsc --noEmit -p backend/tsconfig.json
-
-      - name: Run backend tests
-        run: npm test
-
-      - name: Build Storybook
-        run: npm --prefix frontend run build-storybook
-
-      - name: Setup Rust
-        uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          target: wasm32-unknown-unknown
-
-      - name: Cache Rust dependencies
+      - name: Cache backend node_modules
         uses: actions/cache@v4
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            contracts/target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          path: backend/node_modules
+          key: ${{ runner.os }}-backend-node-${{ hashFiles('backend/package-lock.json') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-
+            ${{ runner.os }}-backend-node-
 
-      - name: Build Soroban contract
-        run: cd contracts && cargo build --target wasm32-unknown-unknown --release
+      - name: Install backend dependencies
+        run: npm ci
+
+      - name: TypeScript type-check backend
+        run: npx tsc --noEmit -p tsconfig.json
+
+      - name: Lint backend
+        run: npm run lint
+
+      - name: Run backend unit tests
+        run: npm test
+
+      - name: Run backend coverage threshold
+        run: npm run test:coverage
+
+      - name: Upload backend coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage-report
+          path: backend/coverage

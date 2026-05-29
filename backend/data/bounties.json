@@ -1,6 +1,6 @@
 [
   {
-    "id": "BNT-0097",
+    "id": "BNT-0103",
     "repo": "test/repo",
     "issueNumber": 9999,
     "title": "UNIQUE_XYZZY_TITLE",
@@ -10,6 +10,138 @@
     "amount": 10,
     "labels": [],
     "status": "open",
+    "createdAt": 1780048149,
+    "deadlineAt": 1782640149,
+    "version": 1,
+    "events": [
+      {
+        "type": "created",
+        "timestamp": 1780048149
+      }
+    ],
+    "reservationTimeoutSeconds": 604800
+  },
+  {
+    "id": "BNT-0102",
+    "repo": "test/repo",
+    "issueNumber": 9999,
+    "title": "UNIQUE_XYZZY_TITLE",
+    "summary": "some description",
+    "maintainer": "GAAAA",
+    "tokenSymbol": "XLM",
+    "amount": 10,
+    "labels": [],
+    "status": "open",
+    "createdAt": 1780048076,
+    "deadlineAt": 1782640076,
+    "version": 1,
+    "events": [
+      {
+        "type": "created",
+        "timestamp": 1780048076
+      }
+    ],
+    "reservationTimeoutSeconds": 604800
+  },
+  {
+    "id": "BNT-0101",
+    "repo": "test/repo",
+    "issueNumber": 9999,
+    "title": "UNIQUE_XYZZY_TITLE",
+    "summary": "some description",
+    "maintainer": "GAAAA",
+    "tokenSymbol": "XLM",
+    "amount": 10,
+    "labels": [],
+    "status": "open",
+    "createdAt": 1780047673,
+    "deadlineAt": 1782639673,
+    "version": 1,
+    "events": [
+      {
+        "type": "created",
+        "timestamp": 1780047673
+      }
+    ],
+    "reservationTimeoutSeconds": 604800
+  },
+  {
+    "id": "BNT-0100",
+    "repo": "test/repo",
+    "issueNumber": 9999,
+    "title": "UNIQUE_XYZZY_TITLE",
+    "summary": "some description",
+    "maintainer": "GAAAA",
+    "tokenSymbol": "XLM",
+    "amount": 10,
+    "labels": [],
+    "status": "open",
+    "createdAt": 1780047582,
+    "deadlineAt": 1782639582,
+    "version": 1,
+    "events": [
+      {
+        "type": "created",
+        "timestamp": 1780047582
+      }
+    ],
+    "reservationTimeoutSeconds": 604800
+  },
+  {
+    "id": "BNT-0099",
+    "repo": "test/repo",
+    "issueNumber": 9999,
+    "title": "UNIQUE_XYZZY_TITLE",
+    "summary": "some description",
+    "maintainer": "GAAAA",
+    "tokenSymbol": "XLM",
+    "amount": 10,
+    "labels": [],
+    "status": "open",
+    "createdAt": 1780047318,
+    "deadlineAt": 1782639318,
+    "version": 1,
+    "events": [
+      {
+        "type": "created",
+        "timestamp": 1780047318
+      }
+    ],
+    "reservationTimeoutSeconds": 604800
+  },
+  {
+    "id": "BNT-0098",
+    "repo": "test/repo",
+    "issueNumber": 9999,
+    "title": "UNIQUE_XYZZY_TITLE",
+    "summary": "some description",
+    "maintainer": "GAAAA",
+    "tokenSymbol": "XLM",
+    "amount": 10,
+    "labels": [],
+    "status": "open",
+    "createdAt": 1780047293,
+    "deadlineAt": 1782639293,
+    "version": 1,
+    "events": [
+      {
+        "type": "created",
+        "timestamp": 1780047293
+      }
+    ],
+    "reservationTimeoutSeconds": 604800
+  },
+  {
+    "id": "BNT-0097",
+    "repo": "test/repo",
+    "issueNumber": 9999,
+    "title": "UNIQUE_XYZZY_TITLE",
+    "summary": "some description",
+    "maintainer": "GAAAA",
+    "tokenSymbol": "XLM",
+    "amount": 10,
+    "labels": [],
+    "status": "expired",
     "createdAt": 1777400477,
     "deadlineAt": 1779992477,
     "version": 1,
@@ -17,6 +149,10 @@
       {
         "type": "created",
         "timestamp": 1777400477
+      },
+      {
+        "type": "expired",
+        "timestamp": 1780047293
       }
     ],
     "reservationTimeoutSeconds": 604800
@@ -31,7 +167,7 @@
     "tokenSymbol": "XLM",
     "amount": 10,
     "labels": [],
-    "status": "open",
+    "status": "expired",
     "createdAt": 1777379157,
     "deadlineAt": 1779971157,
     "version": 1,
@@ -39,6 +175,10 @@
       {
         "type": "created",
         "timestamp": 1777379157
+      },
+      {
+        "type": "expired",
+        "timestamp": 1780047293
       }
     ],
     "reservationTimeoutSeconds": 604800
@@ -53,7 +193,7 @@
     "tokenSymbol": "XLM",
     "amount": 10,
     "labels": [],
-    "status": "open",
+    "status": "expired",
     "createdAt": 1777377162,
     "deadlineAt": 1779969162,
     "version": 1,
@@ -61,6 +201,10 @@
       {
         "type": "created",
         "timestamp": 1777377162
+      },
+      {
+        "type": "expired",
+        "timestamp": 1780047293
       }
     ],
     "reservationTimeoutSeconds": 604800
@@ -75,7 +219,7 @@
     "tokenSymbol": "XLM",
     "amount": 10,
     "labels": [],
-    "status": "open",
+    "status": "expired",
     "createdAt": 1777376302,
     "deadlineAt": 1779968302,
     "version": 1,
@@ -83,6 +227,10 @@
       {
         "type": "created",
         "timestamp": 1777376302
+      },
+      {
+        "type": "expired",
+        "timestamp": 1780047293
       }
     ],
     "reservationTimeoutSeconds": 604800
@@ -97,7 +245,7 @@
     "tokenSymbol": "XLM",
     "amount": 10,
     "labels": [],
-    "status": "open",
+    "status": "expired",
     "createdAt": 1777375964,
     "deadlineAt": 1779967964,
     "version": 1,
@@ -105,6 +253,10 @@
       {
         "type": "created",
         "timestamp": 1777375964
+      },
+      {
+        "type": "expired",
+        "timestamp": 1780047293
       }
     ],
     "reservationTimeoutSeconds": 604800
@@ -119,7 +271,7 @@
     "tokenSymbol": "XLM",
     "amount": 10,
     "labels": [],
-    "status": "open",
+    "status": "expired",
     "createdAt": 1777375843,
     "deadlineAt": 1779967843,
     "version": 1,
@@ -127,6 +279,10 @@
       {
         "type": "created",
         "timestamp": 1777375843
+      },
+      {
+        "type": "expired",
+        "timestamp": 1780047293
       }
     ],
     "reservationTimeoutSeconds": 604800
@@ -141,7 +297,7 @@
     "tokenSymbol": "XLM",
     "amount": 10,
     "labels": [],
-    "status": "open",
+    "status": "expired",
     "createdAt": 1777375521,
     "deadlineAt": 1779967521,
     "version": 1,
@@ -149,6 +305,10 @@
       {
         "type": "created",
         "timestamp": 1777375521
+      },
+      {
+        "type": "expired",
+        "timestamp": 1780047293
       }
     ],
     "reservationTimeoutSeconds": 604800
@@ -163,7 +323,7 @@
     "tokenSymbol": "XLM",
     "amount": 10,
     "labels": [],
-    "status": "open",
+    "status": "expired",
     "createdAt": 1777223009,
     "deadlineAt": 1779815009,
     "version": 1,
@@ -171,6 +331,10 @@
       {
         "type": "created",
         "timestamp": 1777223009
+      },
+      {
+        "type": "expired",
+        "timestamp": 1780047293
       }
     ],
     "reservationTimeoutSeconds": 604800
