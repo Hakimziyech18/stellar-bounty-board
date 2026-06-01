@@ -125,6 +125,15 @@ export const submitBountySchema = z
       description: "Must match the contributor who reserved the bounty.",
     }),
 
+    submissionUrl: z
+      .string()
+      .trim()
+      .url()
+      .openapi({ 
+        example: "https://github.com/owner/repo/pull/123",
+        description: "GitHub pull request URL for the submission." 
+      }),
+
     notes: z
       .string()
       .trim()

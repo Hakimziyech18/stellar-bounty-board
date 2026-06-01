@@ -1,5 +1,37 @@
 # Security Policy
 
+## Content Security Policy (CSP)
+
+The frontend build injects a `Content-Security-Policy-Report-Only` meta tag via `frontend/vite.config.ts`.
+
+### Current policy
+
+```
+default-src 'self';
+connect-src 'self' https://rpc-futurenet.stellar.org https://api.github.com;
+script-src  'self';
+style-src   'self' 'unsafe-inline';
+img-src     'self' data: blob:;
+font-src    'self';
+object-src  'none';
+base-uri    'self';
+form-action 'self';
+```
+
+### Report-only mode
+
+The policy is currently deployed in **report-only mode** (`Content-Security-Policy-Report-Only`).
+Violations are logged to the browser console but do **not** block any functionality.
+Once no violations are observed in staging, the meta tag should be upgraded to
+`Content-Security-Policy` to enforce the policy.
+
+### Updating the policy
+
+Edit the `cspDirectives` array in `frontend/vite.config.ts` → `cspPlugin()`.
+After any change, verify there are no new console violations before promoting to production.
+
+---
+
 ## Supported Versions
 
 Only the latest version of the Stellar Bounty Board is currently supported with security updates.

@@ -47,6 +47,7 @@ import UsdAmount from "./UsdAmount";
 
 import SkeletonBountyCard from "./SkeletonBountyCard";
 import EmptyState from "./EmptyState";
+import { ShortcutsHelpOverlay } from "./ShortcutsHelpOverlay";
 
 // Lazy-load BountyDetailPage — it is only rendered on /bounties/:id routes,
 // so deferring it keeps the initial board bundle smaller.
@@ -55,7 +56,7 @@ const BountyDetailPage = lazy(() => import("./BountyDetailPage"));
 const STELLAR_PUBLIC_KEY_HINT = "Expected Stellar public key (starts with G and is 56 characters).";
 const STELLAR_PUBLIC_KEY_REGEX = /^G[A-Z2-7]{55}$/;
 
-const DARK_MODE_KEY = "stellar-bounty-board:theme";
+const DARK_MODE_KEY = "stellar-bounty-board-theme";
 
 function useDarkMode() {
   const [dark, setDark] = useState<boolean>(() => {
@@ -312,6 +313,7 @@ function App() {
   const [submitting, setSubmitting] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showShortcutsOverlay, setShowShortcutsOverlay] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState(initialFilters.searchQuery);
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState(initialFilters.searchQuery);
@@ -463,6 +465,57 @@ function App() {
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
   }, []);
+
+  // ─── Keyboard shortcut handler ───────────────────────────────────────────
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    function handleGlobalKeyDown(event: KeyboardEvent) {
+      // Never intercept shortcuts while typing inside a form element
+      const target = event.target as HTMLElement;
+      const tag = target.tagName;
+      if (
+        tag === "INPUT" ||
+        tag === "TEXTAREA" ||
+        tag === "SELECT" ||
+        target.isContentEditable
+      ) {
+        return;
+      }
+
+      const statusMap: Record<string, "all" | BountyStatus> = {
+        "1": "all",
+        "2": "open",
+        "3": "reserved",
+        "4": "submitted",
+        "5": "released",
+      };
+
+      switch (event.key) {
+        case "?":
+          event.preventDefault();
+          setShowShortcutsOverlay((prev) => !prev);
+          break;
+        case "/":
+          event.preventDefault();
+          searchInputRef.current?.focus();
+          break;
+        case "1":
+        case "2":
+        case "3":
+        case "4":
+        case "5":
+          setStatusFilter(statusMap[event.key] as "all" | BountyStatus);
+          break;
+        default:
+          break;
+      }
+    }
+
+    window.addEventListener("keydown", handleGlobalKeyDown);
+    return () => window.removeEventListener("keydown", handleGlobalKeyDown);
+  }, []);
+  // ─────────────────────────────────────────────────────────────────────────
 
   function navigate(nextPath: string) {
     if (nextPath === window.location.pathname) return;
@@ -869,6 +922,15 @@ function App() {
                 >
                   {exporting ? "Exporting..." : "Export released payouts (CSV)"}
                 </button>
+                <button
+                  type="button"
+                  className="secondary-link"
+                  onClick={toggleDark}
+                  aria-label={dark ? "Switch to light mode" : "Switch to dark mode"}
+                  title={dark ? "Switch to light mode" : "Switch to dark mode"}
+                >
+                  {dark ? <Sun size={16} /> : <Moon size={16} />}
+                </button>
               </div>
             </div>
 
@@ -1113,9 +1175,11 @@ function App() {
                     <div className="input-with-icon">
                       <Search size={16} />
                       <input
+                        ref={searchInputRef}
                         value={searchQuery}
                         onChange={(event) => setSearchQuery(event.target.value)}
                         placeholder="Search repo, title, labels, status"
+                        aria-keyshortcuts="/"
                       />
                     </div>
                   </label>
@@ -1606,6 +1670,11 @@ function App() {
               }}
             />
           )}
+
+          <ShortcutsHelpOverlay
+            isOpen={showShortcutsOverlay}
+            onClose={() => setShowShortcutsOverlay(false)}
+          />
         </div>
     );
 }
