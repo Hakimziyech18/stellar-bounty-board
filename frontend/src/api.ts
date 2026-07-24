@@ -213,7 +213,7 @@ async function requestBlob(
     }
   }
 
-  const message = lastError instanceof Error ? lastError.message : undefined;
+  const message = lastError instanceof Error ? error.message : undefined;
   throw formatRetryError(retryLabel, retryAttempts, message);
 }
 
@@ -276,6 +276,74 @@ export async function submitBounty(
   return body.data;
 }
 
+/**
+ * Signed release action – requires a Freighter signature.
+ * The caller must provide { signature, publicKey } from a Freighter signPayload() call.
+ */
+export async function releaseBountySigned(
+  id: string,
+  maintainer: string,
+  signature: string,
+  publicKey: string,
+  transactionHash?: string,
+  action?: string,
+  timestamp?: number
+): Promise<Bounty> {
+  const body = await requestJson<{ data: Bounty }>(`/bounties/${id}/release`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-stellar-signature': signature,
+      'x-stellar-public-key': publicKey,
+    },
+    body: JSON.stringify({
+      maintainer,
+      transactionHash,
+      action: action ?? 'release',
+      bountyId: id,
+      timestamp: timestamp ?? Math.floor(Date.now() / 1000),
+    }),
+  });
+
+  return body.data;
+}
+
+/**
+ * Signed refund action – requires a Freighter signature.
+ * The caller must provide { signature, publicKey } from a Freighter signPayload() call.
+ */
+export async function refundBountySigned(
+  id: string,
+  maintainer: string,
+  signature: string,
+  publicKey: string,
+  transactionHash?: string,
+  action?: string,
+  timestamp?: number
+): Promise<Bounty> {
+  const body = await requestJson<{ data: Bounty }>(`/bounties/${id}/refund`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-stellar-signature': signature,
+      'x-stellar-public-key': publicKey,
+    },
+    body: JSON.stringify({
+      maintainer,
+      transactionHash,
+      action: action ?? 'refund',
+      bountyId: id,
+      timestamp: timestamp ?? Math.floor(Date.now() / 1000),
+    }),
+  });
+
+  return body.data;
+}
+
+/**
+ * Legacy release function (without Freighter signing) – kept for backwards compatibility.
+ * Use releaseBountySigned() for the signed flow.
+ */
 export async function releaseBounty(
   id: string,
   maintainer: string,
@@ -290,6 +358,10 @@ export async function releaseBounty(
   return body.data;
 }
 
+/**
+ * Legacy refund function (without Freighter signing) – kept for backwards compatibility.
+ * Use refundBountySigned() for the signed flow.
+ */
 export async function refundBounty(
   id: string,
   maintainer: string,
@@ -391,3 +463,10 @@ export function toContractBountyStatus(status: Bounty['status']): ContractBounty
 export function getContractErrorLabel(error: ContractError): string {
   return CONTRACT_ERROR_LABELS[error] ?? 'UnknownContractError';
 }
+
+/**
+ * Stellar test network configuration for Freighter.
+ */
+export const STELLAR_NETWORK_PASSPHRASE =
+  import.meta.env.VITE_STELLAR_NETWORK_PASSPHRASE ??
+  "Test SDF Network ; September 2015";
