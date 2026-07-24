@@ -15,7 +15,6 @@ import {
   Rocket,
   Search,
   Sun,
-  Wallet,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -23,8 +22,6 @@ import {
   getBounty,
   listBounties,
   listOpenIssues,
-  refundBounty,
-  releaseBounty,
   releaseBountySigned,
   refundBountySigned,
   reserveBounty,
@@ -551,24 +548,24 @@ function App() {
 
     const transactionHash = window.prompt("Transaction hash (64 hex chars, optional)") ?? undefined;
     const timestamp = Math.floor(Date.now() / 1000);
+    const payload = {
+      maintainer: freighter.publicKey,
+      ...(transactionHash ? { transactionHash } : {}),
+      action: "release" as const,
+      bountyId: bounty.id,
+      timestamp,
+    };
 
     try {
       // Sign the payload with Freighter
-      const { signature, publicKey } = await freighter.signPayload({
-        bountyId: bounty.id,
-        action: "release",
-        timestamp,
-      });
+      const { signature, publicKey } = await freighter.signPayload(payload);
 
       // Send the signed request
       await releaseBountySigned(
         bounty.id,
-        freighter.publicKey,
+        payload,
         signature,
-        publicKey,
-        transactionHash || undefined,
-        "release",
-        timestamp
+        publicKey
       );
       await refresh();
       toast.success("Bounty released — payment sent!");
@@ -591,24 +588,24 @@ function App() {
 
     const transactionHash = window.prompt("Transaction hash (64 hex chars, optional)") ?? undefined;
     const timestamp = Math.floor(Date.now() / 1000);
+    const payload = {
+      maintainer: freighter.publicKey,
+      ...(transactionHash ? { transactionHash } : {}),
+      action: "refund" as const,
+      bountyId: bounty.id,
+      timestamp,
+    };
 
     try {
       // Sign the payload with Freighter
-      const { signature, publicKey } = await freighter.signPayload({
-        bountyId: bounty.id,
-        action: "refund",
-        timestamp,
-      });
+      const { signature, publicKey } = await freighter.signPayload(payload);
 
       // Send the signed request
       await refundBountySigned(
         bounty.id,
-        freighter.publicKey,
+        payload,
         signature,
-        publicKey,
-        transactionHash || undefined,
-        "refund",
-        timestamp
+        publicKey
       );
       await refresh();
       toast.success("Bounty refunded successfully!");

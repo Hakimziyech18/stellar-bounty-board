@@ -4,7 +4,7 @@
  * Provides:
  *  - Connection state (isConnected, publicKey)
  *  - Network detection (isOnCorrectNetwork)
- *  - signPayload() for signing { bountyId, action, timestamp } objects
+ *  - signPayload() for signing canonical request payload objects
  *  - connect() / disconnect() lifecycle
  *  - Error state for disconnection / wrong network
  */
@@ -59,11 +59,7 @@ export interface FreighterState {
 export interface FreighterActions {
   connect: () => Promise<void>;
   disconnect: () => void;
-  signPayload: (payload: {
-    bountyId: string;
-    action: string;
-    timestamp: number;
-  }) => Promise<{ signature: string; publicKey: string }>;
+  signPayload: (payload: Record<string, unknown>) => Promise<{ signature: string; publicKey: string }>;
 }
 
 function freighterError(code: FreighterErrorCode, message: string): FreighterError {
@@ -210,7 +206,7 @@ export function useFreighter(): FreighterState & FreighterActions {
   }, []);
 
   const signPayload = useCallback(
-    async (payload: { bountyId: string; action: string; timestamp: number }) => {
+    async (payload: Record<string, unknown>) => {
       if (!isFreighterInstalled()) {
         throw freighterError("NO_FREIGHTER", "Freighter wallet is not installed.");
       }
