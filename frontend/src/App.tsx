@@ -111,6 +111,7 @@ const contributorStatuses: Array<BountyStatus | "all"> = [
   "released",
   "refunded",
   "expired",
+  "disputed",
 ];
 
 type BountyAction = "reserve" | "submit" | "release" | "refund";

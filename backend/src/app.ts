@@ -10,6 +10,7 @@ import {
   createBounty,
   disputeBounty,
   extendDeadline,
+  resolveDisputeBounty,
   updateBountyNotes,
   listBountyAuditLogs,
   listAllAuditLogs,
@@ -37,6 +38,7 @@ import {
   createBountySchema,
   disputeBountySchema,
   extendDeadlineSchema,
+  resolveDisputeBountySchema,
   maintainerActionSchema,
   reserveBountySchema,
   submitBountySchema,
@@ -666,6 +668,26 @@ app.post(
         parseId(req.params.id),
         req.body.contributor,
         req.body.reason
+      );
+
+      res.json({ data: bounty });
+    } catch (error) {
+      sendError(res, req, error);
+    }
+  }
+);
+
+app.post(
+  '/api/bounties/:id/resolve-dispute',
+  mutationLimiter,
+  validateBody(resolveDisputeBountySchema),
+  async (req: Request, res: Response) => {
+    try {
+      const bounty = await resolveDisputeBounty(
+        parseId(req.params.id),
+        req.body.arbiter,
+        req.body.release,
+        req.body.transactionHash
       );
 
       res.json({ data: bounty });
