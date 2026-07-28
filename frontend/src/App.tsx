@@ -721,6 +721,19 @@ function App() {
     event.preventDefault();
     setSubmitting(true);
     try {
+      // Validate required fields
+      if (!form.repo.trim()) {
+        toast.error("Repository is required.");
+        return;
+      }
+      if (!form.title.trim()) {
+        toast.error("Title is required.");
+        return;
+      }
+      if (form.amount <= 0) {
+        toast.error("Reward amount must be greater than 0.");
+        return;
+      }
       const maintainerError = validateStellarPublicKey(form.maintainer);
       if (maintainerError) {
         toast.error(`Maintainer address: ${maintainerError}`);
