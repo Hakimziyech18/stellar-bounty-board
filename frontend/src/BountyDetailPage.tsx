@@ -121,6 +121,7 @@ export default function BountyDetailPage({
 }: Props) {
 
   const statusAnnouncement = useBountyStatusAnnouncement(bounty, statusCopy);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     updateSocialMetaTags(bounty);
@@ -137,17 +138,12 @@ export default function BountyDetailPage({
     if (!bounty) return;
     const permalink = `${window.location.origin}/bounties/${encodeURIComponent(bounty.id)}`;
     navigator.clipboard.writeText(permalink).then(() => {
-      // Show brief confirmation
-      const button = document.querySelector('[aria-label="Share bounty"]') as HTMLButtonElement;
-      if (button) {
-        const originalText = button.innerHTML;
-        button.innerHTML = `<Share2 size={16} />Copied!`;
-        setTimeout(() => {
-          button.innerHTML = originalText;
-        }, 2000);
-      }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
     }).catch((err) => {
       console.error("Failed to copy URL:", err);
+      // Fallback: show the URL in a prompt so the user can manually copy it
+      window.prompt("Copy the bounty URL manually:", permalink);
     });
   }
 
@@ -166,6 +162,20 @@ export default function BountyDetailPage({
             <h2>{bounty ? bounty.title : "Bounty"}</h2>
           </div>
           <div className="panel-header__actions">
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={handleShare}
+              disabled={loading || !bounty}
+              aria-label="Share bounty"
+              title="Copy bounty URL to clipboard"
+            >
+              {copied ? (
+                <><Check size={16} /> Copied!</>
+              ) : (
+                <><Share2 size={16} /> Share</>
+              )}
+            </button>
             <button
               type="button"
               className="secondary-button print-button"
