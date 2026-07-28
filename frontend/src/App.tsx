@@ -9,6 +9,7 @@ import React, {
   type ReactNode,
   type FormEvent,
 } from "react";
+import { useBeforeUnload } from "./useBeforeUnload";
 import {
   FolderGit2,
   Moon,
@@ -293,6 +294,9 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [showShortcutsOverlay, setShowShortcutsOverlay] = useState(false);
+  const [isFormDirty, setIsFormDirty] = useState(false);
+
+  useBeforeUnload(isFormDirty);
 
   useEffect(() => {
     function goOnline() {
@@ -464,9 +468,15 @@ function App() {
 
   const navigate = useCallback((nextPath: string) => {
     if (nextPath === window.location.pathname) return;
+    if (isFormDirty) {
+      const confirmed = window.confirm(
+        "You have unsaved changes in the bounty creation form. Are you sure you want to leave?",
+      );
+      if (!confirmed) return;
+    }
     window.history.pushState(null, "", nextPath);
     setPathname(nextPath);
-  }, []);
+  }, [isFormDirty]);
 
   const handleOpenBounty = useCallback(
     (id: string) => {
@@ -732,6 +742,7 @@ function App() {
         labels: form.labels.filter(Boolean),
       });
       setForm({ ...initialForm, issueNumber: form.issueNumber + 1 });
+      setIsFormDirty(false);
       await refresh();
       toast.success("Bounty created successfully!");
     } catch (err) {
@@ -772,7 +783,10 @@ function App() {
                     Repository
                     <input
                       value={form.repo}
-                      onChange={(e) => setForm({ ...form, repo: e.target.value })}
+                      onChange={(e) => {
+                        setForm({ ...form, repo: e.target.value });
+                        setIsFormDirty(true);
+                      }}
                       placeholder="owner/repo"
                     />
                   </label>
@@ -781,7 +795,10 @@ function App() {
                     <input
                       type="number"
                       value={form.issueNumber}
-                      onChange={(e) => setForm({ ...form, issueNumber: Number(e.target.value) })}
+                      onChange={(e) => {
+                        setForm({ ...form, issueNumber: Number(e.target.value) });
+                        setIsFormDirty(true);
+                      }}
                     />
                   </label>
                 </div>
@@ -790,7 +807,10 @@ function App() {
                     Title
                     <input
                       value={form.title}
-                      onChange={(e) => setForm({ ...form, title: e.target.value })}
+                      onChange={(e) => {
+                        setForm({ ...form, title: e.target.value });
+                        setIsFormDirty(true);
+                      }}
                       placeholder="Add WebSocket updates..."
                     />
                   </label>
@@ -801,23 +821,43 @@ function App() {
                     <input
                       type="number"
                       value={form.amount}
-                      onChange={(e) => setForm({ ...form, amount: Number(e.target.value) })}
+                      onChange={(e) => {
+                        setForm({ ...form, amount: Number(e.target.value) });
+                        setIsFormDirty(true);
+                      }}
                     />
                   </label>
                   <label>
                     Asset
                     <select
                       value={form.tokenSymbol}
-                      onChange={(e) => setForm({ ...form, tokenSymbol: e.target.value })}
+                      onChange={(e) => {
+                        setForm({ ...form, tokenSymbol: e.target.value });
+                        setIsFormDirty(true);
+                      }}
                     >
                       <option value="XLM">XLM</option>
                       <option value="USDC">USDC</option>
                     </select>
                   </label>
                 </div>
+                <div className="form-actions">
                 <button type="submit" disabled={submitting}>
                   {submitting ? "Creating..." : "Create Bounty"}
                 </button>
+                {isFormDirty && (
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    onClick={() => {
+                      setForm(initialForm);
+                      setIsFormDirty(false);
+                    }}
+                  >
+                    Discard
+                  </button>
+                )}
+              </div>
               </form>
             </div>
           </div>
