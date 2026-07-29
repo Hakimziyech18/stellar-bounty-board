@@ -1,11 +1,12 @@
-import { ReactNode, useState, useCallback, useEffect, useRef } from "react";
-import { ArrowUpRight, Check, Clock, Copy, Share2, Printer } from "lucide-react";
+import { ReactNode, useState, useCallback, useEffect, useRef, useMemo } from "react";
+import { ArrowUpRight, Check, Clock, Copy, Share2, Printer, Star } from "lucide-react";
 import { Bounty, BountyEvent, BountyStatus } from "./types";
 import BountyCountdown from "./BountyCountdown";
 import UsdAmount from "./UsdAmount";
 import { updateSocialMetaTags } from "./metaTags";
 import CopyIcon from "./CopyIcons";
 import { extendDeadline } from "./api";
+import { findSimilarBounties, type BountyRecommendation } from "./recommendations";
 
 
 type BountyAction = "reserve" | "submit" | "release" | "refund";
@@ -26,6 +27,7 @@ type Props = {
     action: { action: BountyAction; label: string; title: string },
   ) => ReactNode;
   formatTimestamp: (value?: number) => string;
+  bounties?: Bounty[];
 };
 
 function useBountyStatusAnnouncement(
@@ -118,9 +120,15 @@ export default function BountyDetailPage({
   actionCopy,
   renderActionButton,
   formatTimestamp,
+  bounties,
 }: Props) {
 
   const statusAnnouncement = useBountyStatusAnnouncement(bounty, statusCopy);
+
+  const similarBounties = useMemo(() => {
+    if (!bounty || !bounties || bounties.length === 0) return [];
+    return findSimilarBounties(bounty, bounties, 3);
+  }, [bounty, bounties]);
 
   useEffect(() => {
     updateSocialMetaTags(bounty);
@@ -359,6 +367,62 @@ export default function BountyDetailPage({
               <BountyTimeline events={bounty.events} formatTimestamp={formatTimestamp} />
             )}
           </div>
+        )}
+
+        {similarBounties.length > 0 && (
+          <section className="panel more-like-this">
+            <div className="panel-header">
+              <div>
+                <span className="panel-kicker">Similar bounties</span>
+                <h2>More like this</h2>
+              </div>
+              <Star size={18} />
+            </div>
+            <div className="board-list">
+              {similarBounties.map((rec) => (
+                <article key={rec.bounty.id} className="bounty-card bounty-card--recommended">
+                  <div className="bounty-card__top">
+                    <div>
+                      <span
+                        className={`status-pill status-pill--${rec.bounty.status}`}
+                      >
+                        {statusCopy[rec.bounty.status].label}
+                      </span>
+                      <h3>{rec.bounty.title}</h3>
+                    </div>
+                    <div className="amount-chip">
+                      {rec.bounty.amount} {rec.bounty.tokenSymbol}
+                    </div>
+                  </div>
+                  <p className="bounty-summary">{rec.bounty.summary}</p>
+                  <div className="recommendation-score">
+                    <Star size={14} />
+                    <span>{Math.round(rec.score * 100)}% match</span>
+                  </div>
+                  <div className="recommendation-reasons">
+                    {rec.reasons.slice(0, 2).map((reason) => (
+                      <span key={reason} className="reason-tag">
+                        {reason}
+                      </span>
+                    ))}
+                  </div>
+                  <div className="recommendation-footer">
+                    <a
+                      className="secondary-link"
+                      href={`https://github.com/${rec.bounty.repo}/issues/${rec.bounty.issueNumber}`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      View issue <ArrowUpRight size={16} />
+                    </a>
+                  </div>
+                </article>
+              ))}
+            </div>
+            <p className="recommendations-disclaimer">
+              Suggestions based on repo similarity, reward range, and label overlap.
+            </p>
+          </section>
         )}
       </section>
     </div>

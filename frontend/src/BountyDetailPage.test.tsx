@@ -42,7 +42,25 @@ const bounty: Bounty = {
   events: [],
 };
 
-function detailProps(detailBounty: Bounty = bounty) {
+const similarBounty: Bounty = {
+  id: "BNTY-99",
+  repo: "ritik4ever/stellar-bounty-board",
+  issueNumber: 99,
+  title: "Similar bounty for testing",
+  summary: "Another bounty with similar characteristics.",
+  maintainer: "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
+  contributor: null,
+  tokenSymbol: "XLM",
+  amount: 200,
+  labels: [{ name: "frontend", color: "blue" }],
+  status: "open",
+  createdAt: 1_700_000_000,
+  deadlineAt: 1_700_086_400,
+  version: 1,
+  events: [],
+};
+
+function detailProps(detailBounty: Bounty = bounty, extraBounties?: Bounty[]) {
   return {
     bounty: detailBounty,
     loading: false,
@@ -53,12 +71,13 @@ function detailProps(detailBounty: Bounty = bounty) {
     actionCopy,
     renderActionButton: () => null,
     formatTimestamp: () => "Jan 1, 2024",
+    bounties: extraBounties,
   };
 }
 
-function renderDetail(detailBounty: Bounty = bounty) {
+function renderDetail(detailBounty: Bounty = bounty, extraBounties?: Bounty[]) {
   return render(
-    <BountyDetailPage {...detailProps(detailBounty)} />,
+    <BountyDetailPage {...detailProps(detailBounty, extraBounties)} />,
   );
 }
 
@@ -137,5 +156,31 @@ describe("BountyDetailPage copy actions", () => {
     });
 
     expect(screen.queryByText("Bounty #73 status changed to Reserved")).not.toBeInTheDocument();
+  });
+
+  describe("More like this section", () => {
+    it("does not render when no bounties prop is provided", () => {
+      renderDetail(bounty);
+      expect(screen.queryByText("More like this")).not.toBeInTheDocument();
+    });
+
+    it("does not render when the current bounty is the only bounty", () => {
+      renderDetail(bounty, [bounty]);
+      expect(screen.queryByText("More like this")).not.toBeInTheDocument();
+    });
+
+    it("renders similar bounties when matching bounties are available", () => {
+      renderDetail(bounty, [bounty, similarBounty]);
+      expect(screen.getByText("More like this")).toBeInTheDocument();
+      expect(screen.getByText("Similar bounty for testing")).toBeInTheDocument();
+    });
+
+    it("excludes the current bounty from the similar list", () => {
+      renderDetail(bounty, [bounty, similarBounty]);
+      const moreLikeThis = screen.getByText("More like this").closest("section")!;
+      expect(moreLikeThis).not.toHaveTextContent("Copy button test bounty");
+      // The current bounty title should only appear in the detail section, not in "More like this"
+      expect(screen.getByText("Copy button test bounty")).toBeInTheDocument();
+    });
   });
 });
