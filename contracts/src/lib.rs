@@ -8,9 +8,14 @@ use soroban_sdk::{
     token::Client as TokenClient, Address, Env, String, Vec,
 };
 
-// ─── Contract Version ─────────────────────────────────────────────────────────
+// ─── Contract Version ───────────────────────────────────────────────────────────
 /// Semver string pulled from Cargo.toml at compile time.
 pub const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// Minimum allowed bounty amount to prevent dust bounties.
+/// Default: 100 stroops (0.00001 XLM).
+/// This can be overridden by the contract admin via `set_min_bounty_amount`.
+pub const DEFAULT_MIN_BOUNTY_AMOUNT: i128 = 100;
 
 #[contracttype]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -59,6 +64,8 @@ enum DataKey {
     DisputeWindow,
     /// Accumulated protocol fee statistics.
     FeeStats,
+    /// Minimum bounty amount required to prevent dust bounties.
+    MinBountyAmount,
 }
 
 #[contracttype]
@@ -139,6 +146,7 @@ pub struct BountyDeadlineExtended {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ContractError {
     InvalidAmount,
+    AmountTooSmall,
     DeadlineMustBeInTheFuture,
     BountyNotOpen,
     BountyMustBeReserved,
@@ -176,14 +184,14 @@ pub struct StellarBountyBoardContract;
 
 #[contractimpl]
 impl StellarBountyBoardContract {
-    // ─── Version ─────────────────────────────────────────────────────────────
+    // ─── Version ────────────────────────────────────────────────────────────────────
     /// Returns the contract version as a semver string (e.g. "0.1.0").
     pub fn get_version(_env: Env) -> String {
         // We use _env because String::from_str needs it, but in future
         // Soroban SDK versions this may be optional for static strings.
         String::from_str(&_env, CONTRACT_VERSION)
     }
-    
+
     pub fn initialize(env: Env, fee_recipient: Address, arbiter: Address, dispute_window: u64) {
         // Prevent re-initialization
         if env.storage().persistent().has(&DataKey::FeeRecipient) {
@@ -196,6 +204,10 @@ impl StellarBountyBoardContract {
         env.storage()
             .persistent()
             .set(&DataKey::DisputeWindow, &dispute_window);
+        // Set default minimum bounty amount on initialization
+        env.storage()
+            .persistent()
+            .set(&DataKey::MinBountyAmount, &DEFAULT_MIN_BOUNTY_AMOUNT);
     }
 
     pub fn get_fee_recipient(env: Env) -> Address {
@@ -203,6 +215,37 @@ impl StellarBountyBoardContract {
             .persistent()
             .get(&DataKey::FeeRecipient)
             .unwrap_or_else(|| panic!("not initialized"))
+    }
+
+    /// Returns the current minimum bounty amount required to create a bounty.
+    /// If the contract has not been initialized, this will panic.
+    pub fn get_min_bounty_amount(env: Env) -> i128 {
+        env.storage()
+            .persistent()
+            .get(&DataKey::MinBountyAmount)
+            .unwrap_or(DEFAULT_MIN_BOUNTY_AMOUNT)
+    }
+
+    /// Allows the arbiter to update the minimum bounty amount.
+    /// Only callable by the configured arbiter address.
+    pub fn set_min_bounty_amount(env: Env, new_min: i128) {
+        let arbiter: Address = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Arbiter)
+            .unwrap_or_else(|| panic!("arbiter not set"));
+        arbiter.require_auth();
+
+        if new_min <= 0 {
+            panic_error(ContractError::InvalidAmount);
+        }
+        if new_min > MAX_BOUNTY_AMOUNT {
+            panic_error(ContractError::InvalidAmount);
+        }
+
+        env.storage()
+            .persistent()
+            .set(&DataKey::MinBountyAmount, &new_min);
     }
 
     pub fn create_bounty(
@@ -218,8 +261,13 @@ impl StellarBountyBoardContract {
     ) -> u64 {
         maintainer.require_auth();
 
+        let min_amount = Self::get_min_bounty_amount(env.clone());
+
         if amount <= 0 || amount > MAX_BOUNTY_AMOUNT {
             panic_error(ContractError::InvalidAmount);
+        }
+        if amount < min_amount {
+            panic_error(ContractError::AmountTooSmall);
         }
         if deadline <= env.ledger().timestamp() {
             panic_error(ContractError::DeadlineMustBeInTheFuture);
@@ -342,7 +390,7 @@ impl StellarBountyBoardContract {
         let token_client = TokenClient::new(&env, &bounty.token);
         let contract_address = env.current_contract_address();
 
-        // ── Fee calculation ──────────────────────────────────────────────
+        // ── Fee calculation ────────────────────────────────────────────────────────────
         // Fee is deducted FROM the payout, never added on top.
         // fee_amount = floor(amount * protocol_fee_bps / 10_000)
         // net_payout = amount - fee_amount
@@ -368,7 +416,7 @@ impl StellarBountyBoardContract {
                 .unwrap_or_else(|| panic!("fee recipient not set"));
             token_client.transfer(&contract_address, &fee_recipient, &fee_amount);
         }
-        // ────────────────────────────────────────────────────────────────
+        // ───────────────────────────────────────────────────────────────────────────────
 
         // Atomically update FeeStats
         accumulate_fee_stats(&env, fee_amount);
@@ -611,13 +659,6 @@ impl StellarBountyBoardContract {
             .unwrap_or(0)
     }
 
-pub fn get_next_bounty_id(env: Env) -> u64 {
-        env.storage()
-            .persistent()
-            .get(&DataKey::NextBountyId)
-            .unwrap_or(0)
-    }
-
     /// Read-only view function to enumerate bounties on-chain.
     pub fn get_all_bounties(env: Env, start: u64, limit: u32) -> Vec<Bounty> {
         let enforced_limit = if limit > 50 { 50 } else { limit };
@@ -665,7 +706,6 @@ pub fn get_next_bounty_id(env: Env) -> u64 {
                 bounty_count: 0,
             })
     }
-} main
 }
 
 fn read_bounty(env: &Env, bounty_id: u64) -> Bounty {
@@ -688,4 +728,18 @@ fn expire_if_needed(env: &Env, bounty: &mut Bounty) {
     {
         bounty.status = BountyStatus::Expired;
     }
+}
+
+fn accumulate_fee_stats(env: &Env, fee_amount: i128) {
+    let mut stats: FeeStats = env
+        .storage()
+        .persistent()
+        .get(&DataKey::FeeStats)
+        .unwrap_or(FeeStats {
+            total_collected: 0,
+            bounty_count: 0,
+        });
+    stats.total_collected += fee_amount;
+    stats.bounty_count += 1;
+    env.storage().persistent().set(&DataKey::FeeStats, &stats);
 }
