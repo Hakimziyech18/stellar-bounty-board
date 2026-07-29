@@ -56,6 +56,7 @@ import {
 import { idempotencyMiddleware } from './middleware/idempotency';
 import { requireJsonContentType } from './middleware/contentType';
 import { readLimiter, mutationLimiter } from './utils';
+import { maintainerLimiter } from './middleware/maintainerLimiter';
 import { logger } from './logger';
 import { createAdminApiKeyAuthMiddleware } from './middleware/adminAuth';
 import { handleGitHubPrEvent } from './webhooks/githubPrHandler';
@@ -521,6 +522,7 @@ app.post(
   '/api/bounties',
   mutationLimiter,
   requireJsonContentType,
+  maintainerLimiter,
   createBountyCreationSignatureMiddleware(),
   validateBody(createBountySchema),
   async (req: Request, res: Response) => {
