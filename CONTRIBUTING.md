@@ -46,6 +46,11 @@ If you want to seed good open-source work quickly:
 2. Open it as a GitHub issue with the suggested labels.
 3. Tag whether it is `good first issue`, `enhancement`, or `help wanted`.
 
+See the wave backlog documents for organized issue sets:
+- [Wave 4](docs/wave-4.md) — 60 issues across frontend, backend, contracts, docs, and DevOps
+- [Wave 5](docs/wave-5.md) — 40 issues focusing on security, observability, and polish
+- [Wave 6](docs/wave-6.md) — 7 issues for production readiness: database migration, wallet auth, and GitHub integration
+
 High-value contribution areas:
 
 - Wallet-authenticated payout flow
