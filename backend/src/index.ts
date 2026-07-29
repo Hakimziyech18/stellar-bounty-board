@@ -7,6 +7,8 @@ import { logStructured } from "./logger";
 import path from "node:path";
 import { Worker } from "node:worker_threads";
 import { invalidateBountyCache } from "./services/bountyStore";
+import { startExpirationJob, stopExpirationJob } from "./services/reservationExpirationJob";
+import { startArchiveJob, stopArchiveJob } from "./services/archiveScheduler";
 
 const port = Number(process.env.PORT ?? 3001);
 const keepAliveTimeout = Number(process.env.KEEP_ALIVE_TIMEOUT ?? 65000);
@@ -69,6 +71,7 @@ function startIndexerWorker() {
 if (process.env.NODE_ENV !== "test") {
   startIndexerWorker();
   startExpirationJob();
+  startArchiveJob();
 }
 
 async function shutdown(signal: string): Promise<void> {
@@ -79,6 +82,7 @@ async function shutdown(signal: string): Promise<void> {
 
   // Stop expiration job before draining connections
   stopExpirationJob();
+  stopArchiveJob();
 
   // Stop the indexer worker
   if (indexerWorker) {
