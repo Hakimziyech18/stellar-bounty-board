@@ -516,6 +516,13 @@ textarea {
   color: var(--muted);
 }
 
+.form-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-top: 4px;
+}
+
 input,
 textarea {
   width: 100%;
