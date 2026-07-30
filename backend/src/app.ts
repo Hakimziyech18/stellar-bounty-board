@@ -44,6 +44,7 @@ import {
 } from './validation/schemas';
 import { validateBody } from './middleware/validateBody';
 import { isValidStellarAddress } from './utils';
+import { getPublicConfig } from './config';
 
 import {
   captureRawBody,
@@ -829,6 +830,30 @@ app.get('/api/stats', async (_req: Request, res: Response) => {
   try {
     const metrics = await aggregatedMetrics.getCached();
     res.json({ data: metrics });
+  } catch (error) {
+    sendError(res, _req, error, 500);
+  }
+});
+
+/**
+ * GET /api/config
+ *
+ * Returns non-sensitive runtime configuration so the frontend and contract-
+ * interaction layer can stay in sync without hardcoding values.
+ *
+ * Exposed values: fee bps, dispute window, min/max bounty amounts, supported
+ * tokens (symbol → contract address), default reservation TTL, and network.
+ *
+ * Nothing sensitive (API keys, DB strings, webhook secrets, maintainer keys)
+ * is ever included in this response.
+ *
+ * Cache-Control: max-age=300 (5 min) — these values change infrequently.
+ */
+app.get('/api/config', (_req: Request, res: Response) => {
+  try {
+    const config = getPublicConfig();
+    res.setHeader('Cache-Control', 'public, max-age=300, stale-while-revalidate=60');
+    res.json({ data: config });
   } catch (error) {
     sendError(res, _req, error, 500);
   }
