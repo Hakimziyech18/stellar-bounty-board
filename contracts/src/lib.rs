@@ -270,7 +270,7 @@ impl StellarBountyBoardContract {
             panic!("fee exceeds 100%");
         }
         if protocol_fee_bps > 0 && !env.storage().persistent().has(&DataKey::FeeRecipient) {
-            panic!("fee recipient not set");
+            panic_error(ContractError::FeeRecipientNotSet);
         }
 
         let token_client = TokenClient::new(&env, &token);
@@ -406,7 +406,7 @@ impl StellarBountyBoardContract {
                 .storage()
                 .persistent()
                 .get(&DataKey::FeeRecipient)
-                .unwrap_or_else(|| panic!("fee recipient not set"));
+                .unwrap_or_else(|| panic_error(ContractError::FeeRecipientNotSet));
             token_client.transfer(&contract_address, &fee_recipient, &fee_amount);
         }
         // ────────────────────────────────────────────────────────────────
@@ -545,7 +545,7 @@ impl StellarBountyBoardContract {
             .storage()
             .persistent()
             .get(&DataKey::Arbiter)
-            .unwrap_or_else(|| panic!("arbiter not set"));
+            .unwrap_or_else(|| panic_error(ContractError::ArbiterNotSet));
 
         if arbiter != stored_arbiter {
             panic_error(ContractError::NotArbiter);
@@ -570,7 +570,7 @@ impl StellarBountyBoardContract {
             .storage()
             .persistent()
             .get(&DataKey::Arbiter)
-            .unwrap_or_else(|| panic!("arbiter not set"));
+            .unwrap_or_else(|| panic_error(ContractError::ArbiterNotSet));
 
         arbiter.require_auth();
 
@@ -614,7 +614,7 @@ impl StellarBountyBoardContract {
                     .storage()
                     .persistent()
                     .get(&DataKey::FeeRecipient)
-                    .unwrap_or_else(|| panic!("fee recipient not set"));
+                    .unwrap_or_else(|| panic_error(ContractError::FeeRecipientNotSet));
                 token_client.transfer(&contract_address, &fee_recipient, &fee_amount);
             }
 
