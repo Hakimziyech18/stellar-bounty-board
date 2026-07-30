@@ -7,7 +7,6 @@ import {
 } from "./notificationService";
 import { logStructured } from "../logger";
 import { getCache, type CacheAdapter } from "./cache";
- feat/concurrency-file-locking
 import { bountiesCreatedTotal, bountiesReleasedTotal } from "../metrics";
 import { validateGithubPrUrlForRepo } from "../validation/prUrl";
 
@@ -150,6 +149,8 @@ export interface BountyRecord {
   disputedAt?: number;
   /** Reason provided by the contributor for disputing the bounty. */
   disputeReason?: string;
+  /** Unix timestamp in seconds of the last admin alert sent for this stuck dispute. */
+  lastDisputeAlertAt?: number;
   // Race condition prevention
   /** Version number of the record used for optimistic locking. */
   version: number;
@@ -1307,18 +1308,14 @@ export function listBountyAuditLogs(
   const end = start + pageSize;
   const data = filtered.slice(start, end);
 
-
+  return { data, pagination: { total, page: safePage, pageSize, totalPages } };
+}
 
 export function getBountyEvents(bountyId: string): BountyEvent[] {
   const records = listBounties();
   const bounty = findBounty(records, bountyId);
   return bounty.events || [];
 }
-
-
-  };
-}
- feat/concurrency-file-locking
 
 const GLOBAL_METRICS_CACHE_KEY = "stats:global";
 const GLOBAL_METRICS_TTL_SECONDS = 30;
@@ -1397,4 +1394,3 @@ export function getLeaderboard(limit = 10): LeaderboardEntry[] {
     )
     .slice(0, limit);
 }
- main
