@@ -8,7 +8,7 @@ use soroban_sdk::{
     token::Client as TokenClient, Address, Env, String, Vec,
 };
 
-// ─── Contract Version ─────────────────────────────────────────────────────────
+// ─── Contract Version ───────────────────────────────────────────────────
 /// Semver string pulled from Cargo.toml at compile time.
 pub const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -73,6 +73,10 @@ enum DataKey {
     FeeStats,
     /// Minimum bounty amount required to prevent dust bounties.
     MinBountyAmount,
+    /// Circuit-breaker flag. When true, new bounty creation (and reservation)
+    /// is halted, while existing in-flight bounties can still be released,
+    /// refunded, or disputed. Defaults to false (unpaused) when unset.
+    Paused,
 }
 
 #[contracttype]
@@ -149,6 +153,20 @@ pub struct BountyDeadlineExtended {
     pub new_deadline: u64,
 }
 
+/// Emitted when the contract admin (arbiter) pauses the circuit-breaker.
+#[contracttype]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ContractPaused {
+    pub admin: Address,
+}
+
+/// Emitted when the contract admin (arbiter) unpauses the circuit-breaker.
+#[contracttype]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ContractUnpaused {
+    pub admin: Address,
+}
+
 #[contracttype]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ContractError {
@@ -171,14 +189,17 @@ pub enum ContractError {
     DisputeWindowNotMet,
     DisputeWindowOverrideTooSmall,
     DisputeWindowOverrideTooLarge,
+    /// The contract is paused via the circuit-breaker; the requested
+    /// operation is not permitted until an admin calls `unpause`.
+    ContractIsPaused,
 }
 
 /// Maximum allowed bounty amount: 10 billion XLM expressed in stroops
-/// (1 XLM = 10_000_000 stroops, so 10_000_000_000 XLM × 10_000_000 = 10^17 stroops).
+/// (1 XLM = 10_000_000 stroops, so 10_000_000_000 XLM x 10_000_000 = 10^17 stroops).
 ///
 /// Rationale: Without an upper bound an attacker could create a bounty with
 /// i128::MAX.  Fee math performs  `amount * protocol_fee_bps / 10_000`, which
-/// overflows for values close to i128::MAX (≈ 1.7 × 10^38).  Capping at 10 B
+/// overflows for values close to i128::MAX (~ 1.7 x 10^38).  Capping at 10 B
 /// XLM in stroops (10^17) leaves more than 20 orders-of-magnitude of headroom
 /// below the i128 ceiling, making overflow arithmetically impossible while
 /// still allowing any realistic on-chain bounty value.
@@ -193,7 +214,7 @@ pub struct StellarBountyBoardContract;
 
 #[contractimpl]
 impl StellarBountyBoardContract {
-    // ─── Version ──────────────────────────────────────────────────────────────
+    // ─── Version ────────────────────────────────────────────────────────
     /// Returns the contract version as a semver string (e.g. "0.1.0").
     pub fn get_version(_env: Env) -> String {
         // We use _env because String::from_str needs it, but in future
@@ -257,6 +278,55 @@ impl StellarBountyBoardContract {
             .set(&DataKey::MinBountyAmount, &new_min);
     }
 
+    // ─── Circuit Breaker ────────────────────────────────────────────────
+    /// Pauses the contract, halting new bounty creation (and reservation).
+    /// Only callable by the configured arbiter, which acts as the contract
+    /// admin (the same role used by `set_min_bounty_amount`).
+    /// Existing in-flight bounties can still be released, refunded, or
+    /// disputed while paused.
+    pub fn pause(env: Env) {
+        let admin: Address = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Arbiter)
+            .unwrap_or_else(|| panic!("arbiter not set"));
+        admin.require_auth();
+
+        env.storage().persistent().set(&DataKey::Paused, &true);
+
+        env.events().publish(
+            (symbol_short!("Bounty"), symbol_short!("Pause")),
+            ContractPaused { admin },
+        );
+    }
+
+    /// Unpauses the contract, resuming new bounty creation (and reservation).
+    /// Only callable by the configured arbiter (contract admin).
+    pub fn unpause(env: Env) {
+        let admin: Address = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Arbiter)
+            .unwrap_or_else(|| panic!("arbiter not set"));
+        admin.require_auth();
+
+        env.storage().persistent().set(&DataKey::Paused, &false);
+
+        env.events().publish(
+            (symbol_short!("Bounty"), symbol_short!("Unpaus")),
+            ContractUnpaused { admin },
+        );
+    }
+
+    /// Returns whether the contract is currently paused.
+    /// Defaults to `false` (unpaused) if never explicitly set.
+    pub fn get_paused_state(env: Env) -> bool {
+        env.storage()
+            .persistent()
+            .get(&DataKey::Paused)
+            .unwrap_or(false)
+    }
+
     pub fn create_bounty(
         env: Env,
         maintainer: Address,
@@ -270,6 +340,10 @@ impl StellarBountyBoardContract {
         dispute_window_override: Option<u64>,
     ) -> u64 {
         maintainer.require_auth();
+
+        if Self::get_paused_state(env.clone()) {
+            panic_error(ContractError::ContractIsPaused);
+        }
 
         let min_amount = Self::get_min_bounty_amount(env.clone());
 
@@ -351,6 +425,11 @@ impl StellarBountyBoardContract {
 
     pub fn reserve_bounty(env: Env, bounty_id: u64, contributor: Address) {
         contributor.require_auth();
+
+        if Self::get_paused_state(env.clone()) {
+            panic_error(ContractError::ContractIsPaused);
+        }
+
         let mut bounty = read_bounty(&env, bounty_id);
         expire_if_needed(&env, &mut bounty);
 
@@ -411,7 +490,7 @@ impl StellarBountyBoardContract {
         let token_client = TokenClient::new(&env, &bounty.token);
         let contract_address = env.current_contract_address();
 
-        // ── Fee calculation ───────────────────────────────────────────────────
+        // ── Fee calculation ─────────────────────────────────────────────
         // Fee is deducted FROM the payout, never added on top.
         // fee_amount = floor(amount * protocol_fee_bps / 10_000)
         // net_payout = amount - fee_amount
@@ -437,7 +516,7 @@ impl StellarBountyBoardContract {
                 .unwrap_or_else(|| panic!("fee recipient not set"));
             token_client.transfer(&contract_address, &fee_recipient, &fee_amount);
         }
-        // ──────────────────────────────────────────────────────────────────────
+        // ─────────────────────────────────────────────────────────────────
 
         // Atomically update FeeStats
         accumulate_fee_stats(&env, fee_amount);
