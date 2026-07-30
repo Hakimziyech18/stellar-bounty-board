@@ -229,3 +229,93 @@ export function createGitHubWebhookSignatureMiddleware(secret: SecretResolver): 
     secret,
   });
 }
+
+export interface SecretRotationOptions extends WebhookSignatureProfile {
+  /** The request payload to verify. */
+  payload: Buffer | string;
+  /** The incoming signature header value. */
+  signatureHeader: string | string[] | undefined;
+  /** The newly configured secret (always attempted first). */
+  newSecret: string;
+  /**
+   * The previous secret kept alive during the rotation grace period.
+   * Pass `undefined` when no rotation is in progress.
+   */
+  previousSecret?: string;
+  /**
+   * Milliseconds to allow the old secret after rotation starts.
+   * Defaults to 5 minutes (300_000 ms).
+   */
+  gracePeriodMs?: number;
+  /**
+   * The timestamp when the secret rotation began (from `Date.now()`).
+   * Required when `previousSecret` is supplied; ignored otherwise.
+   */
+  rotationStartedAt?: number;
+}
+
+/**
+ * Verify a webhook signature during a secret rotation.
+ *
+ * Acceptance logic:
+ * - A request signed with `newSecret` is **always** accepted.
+ * - A request signed with `previousSecret` is accepted only while the
+ *   rotation grace period has not expired (`now < rotationStartedAt + gracePeriodMs`).
+ * - Any request that matches neither secret is rejected, regardless of timing.
+ *
+ * @throws {WebhookSignatureError} when the signature cannot be verified.
+ */
+export function verifyWithSecretRotation({
+  payload,
+  signatureHeader,
+  newSecret,
+  previousSecret,
+  gracePeriodMs = 300_000,
+  rotationStartedAt,
+  ...profile
+}: SecretRotationOptions): void {
+  // Normalise the incoming header once.
+  const signature = normalizeSignature(signatureHeader);
+  if (!signature) {
+    throw new WebhookSignatureError(
+      `Missing ${profile.providerName} webhook signature in ${profile.headerName}.`,
+      401,
+    );
+  }
+
+  if (!signature.startsWith(profile.prefix)) {
+    throw new WebhookSignatureError(
+      `Invalid ${profile.providerName} webhook signature format.`,
+      401,
+    );
+  }
+
+  // Helper: compute and compare a single candidate secret (timing-safe).
+  function matchesSecret(candidate: string): boolean {
+    const expected = signWebhookPayload({
+      payload,
+      secret: candidate,
+      algorithm: profile.algorithm,
+      prefix: profile.prefix,
+    });
+    const providedBytes = Buffer.from(signature);
+    const expectedBytes = Buffer.from(expected);
+    if (providedBytes.length !== expectedBytes.length) return false;
+    return timingSafeEqual(providedBytes, expectedBytes);
+  }
+
+  // 1. Always try the new secret first.
+  if (matchesSecret(newSecret)) return;
+
+  // 2. During the grace period, also try the previous secret.
+  if (previousSecret !== undefined && rotationStartedAt !== undefined) {
+    const withinGracePeriod = Date.now() < rotationStartedAt + gracePeriodMs;
+    if (withinGracePeriod && matchesSecret(previousSecret)) return;
+  }
+
+  // 3. Nothing matched — reject.
+  throw new WebhookSignatureError(
+    `Invalid ${profile.providerName} webhook signature.`,
+    401,
+  );
+}
