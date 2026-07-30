@@ -9,6 +9,30 @@ export interface SubmissionFormData {
   notes: string;
 }
 
+/**
+ * Required pre-flight checklist. A contributor cannot submit a PR link until
+ * every one of these items has been explicitly acknowledged.
+ */
+export const CHECKLIST_ITEMS = [
+  {
+    id: "check-linked",
+    label: "PR is linked to the correct issue",
+    hint: "Your PR references the issue this bounty tracks",
+  },
+  {
+    id: "check-pr-desc",
+    label: "PR description explains the changes",
+    hint: "The PR has a clear title and description",
+  },
+  {
+    id: "check-ci",
+    label: "All CI checks pass",
+    hint: "Tests, lint, and build are green on the PR",
+  },
+] as const;
+
+type ChecklistId = (typeof CHECKLIST_ITEMS)[number]["id"];
+
 interface Props {
   bounty: Bounty;
   initialData?: Partial<SubmissionFormData>;
@@ -42,8 +66,16 @@ export default function SubmissionChecklistModal({
 }: Props) {
   const [contributor, setContributor] = useState(initialData?.contributor ?? bounty.contributor ?? "");
   const [prLink, setPrLink] = useState(initialData?.prLink ?? "");
-  const [testsWritten, setTestsWritten] = useState(initialData?.testsWritten ?? false);
+  const [testsWritten] = useState(initialData?.testsWritten ?? false);
   const [notes, setNotes] = useState(initialData?.notes ?? "");
+  const [checklist, setChecklist] = useState<Record<ChecklistId, boolean>>(() =>
+    CHECKLIST_ITEMS.reduce(
+      (acc, item) => ({ ...acc, [item.id]: false }),
+      {} as Record<ChecklistId, boolean>,
+    ),
+  );
+
+  const allChecked = CHECKLIST_ITEMS.every((item) => checklist[item.id]);
   const [touched, setTouched] = useState({ contributor: false, prLink: false });
 
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -65,6 +97,42 @@ export default function SubmissionChecklistModal({
     onClose();
   }
 
+  function handleDialogKeyDown(e: React.KeyboardEvent<HTMLDialogElement>) {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      onClose();
+      return;
+    }
+
+    if (e.key !== "Tab") return;
+
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+
+    const orderedFocusable = [
+      firstInputRef.current,
+      dialog.querySelector<HTMLElement>('input[type="url"]:not(:disabled)'),
+      dialog.querySelector<HTMLElement>('.checklist-item__toggle:not(:disabled)'),
+      dialog.querySelector<HTMLElement>('textarea:not(:disabled)'),
+      ...Array.from(dialog.querySelectorAll<HTMLElement>('.submission-modal__actions button:not(:disabled)')),
+      dialog.querySelector<HTMLElement>('.modal-close-btn:not(:disabled)'),
+    ].filter((element): element is HTMLElement => Boolean(element));
+
+    if (orderedFocusable.length === 0) {
+      e.preventDefault();
+      dialog.focus();
+      return;
+    }
+
+    const currentIndex = orderedFocusable.findIndex((element) => element === document.activeElement);
+    const nextIndex = e.shiftKey
+      ? (currentIndex <= 0 ? orderedFocusable.length - 1 : currentIndex - 1)
+      : (currentIndex === -1 || currentIndex === orderedFocusable.length - 1 ? 0 : currentIndex + 1);
+
+    e.preventDefault();
+    orderedFocusable[nextIndex].focus();
+  }
+
   const contributorError =
     touched.contributor && contributor.trim() && !STELLAR_PUBLIC_KEY_REGEX.test(contributor.trim())
       ? "Enter a Stellar public key (starts with 'G', 56 characters)"
@@ -82,7 +150,8 @@ export default function SubmissionChecklistModal({
   const isValid =
     STELLAR_PUBLIC_KEY_REGEX.test(contributor.trim()) &&
     prLink.trim() !== "" &&
-    validateUrl(prLink) === null;
+    validateUrl(prLink) === null &&
+    allChecked;
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -102,6 +171,7 @@ export default function SubmissionChecklistModal({
       className="submission-modal"
       onClick={handleDialogClick}
       onCancel={handleCancel}
+      onKeyDown={handleDialogKeyDown}
       aria-labelledby="modal-title"
       aria-modal="true"
     >
@@ -111,15 +181,6 @@ export default function SubmissionChecklistModal({
             <span className="panel-kicker">Submission checklist</span>
             <h2 id="modal-title">Submit your work</h2>
           </div>
-          <button
-            type="button"
-            className="modal-close-btn"
-            aria-label="Close"
-            onClick={onClose}
-            disabled={submitting}
-          >
-            <X size={18} />
-          </button>
         </div>
 
         <p className="submission-modal__intro">
@@ -170,36 +231,29 @@ export default function SubmissionChecklistModal({
             )}
           </label>
 
-          {/* Checklist items */}
+          {/* Required pre-flight checklist — submission is blocked until all are checked */}
           <fieldset className="checklist-fieldset">
-            <legend>Pre-submission checklist</legend>
+            <legend>Pre-submission checklist *</legend>
 
-            <ChecklistItem
-              id="check-tests"
-              checked={testsWritten}
-              onChange={setTestsWritten}
-              disabled={submitting}
-              label="Tests written or updated"
-              hint="Unit or integration tests cover the changes"
-            />
+            {CHECKLIST_ITEMS.map((item) => (
+              <ChecklistItem
+                key={item.id}
+                id={item.id}
+                checked={checklist[item.id]}
+                onChange={(value) =>
+                  setChecklist((prev) => ({ ...prev, [item.id]: value }))
+                }
+                disabled={submitting}
+                label={item.label}
+                hint={item.id === "check-linked" ? `Issue #${bounty.issueNumber} in ${bounty.repo}` : item.hint}
+              />
+            ))}
 
-            <ChecklistItem
-              id="check-pr-desc"
-              checked={true}
-              onChange={() => {}}
-              disabled={true}
-              label="PR description explains the changes"
-              hint="Your PR has a clear title and description"
-            />
-
-            <ChecklistItem
-              id="check-linked"
-              checked={true}
-              onChange={() => {}}
-              disabled={true}
-              label="PR is linked to this issue"
-              hint={`Issue #${bounty.issueNumber} in ${bounty.repo}`}
-            />
+            {!allChecked && (
+              <small className="field-hint checklist-fieldset__hint">
+                Check every item above to enable submission.
+              </small>
+            )}
           </fieldset>
 
           {/* Notes */}
@@ -226,12 +280,23 @@ export default function SubmissionChecklistModal({
             <button
               type="submit"
               className="primary-button"
-              disabled={submitting}
+              disabled={submitting || !isValid}
+              aria-disabled={submitting || !isValid}
             >
               {submitting ? "Submitting..." : "Submit work"}
             </button>
           </div>
         </form>
+
+        <button
+          type="button"
+          className="modal-close-btn"
+          aria-label="Close"
+          onClick={onClose}
+          disabled={submitting}
+        >
+          <X size={18} />
+        </button>
       </div>
     </dialog>
   );

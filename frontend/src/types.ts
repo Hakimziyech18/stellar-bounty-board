@@ -1,3 +1,7 @@
+export interface GithubLabel {
+  name: string;
+  color: string; // hex without '#', e.g. "e4e669"
+}
 export type BountyStatus =
   | "open"
   | "reserved"
@@ -30,11 +34,16 @@ export interface Bounty {
   maintainer: string;
   contributor?: string;
   tokenSymbol: string;
+  tokenAddress?: string;
   amount: number;
-  labels: string[];
+  labels: GithubLabel[];
+  tags?: string[];
+
   status: BountyStatus;
   createdAt: number;
   deadlineAt: number;
+  /** ISO 8601 date string representing when the bounty expires. Added in Wave 4. */
+  expiresAt?: string;
   reservedAt?: number;
   submittedAt?: number;
   releasedAt?: number;
@@ -57,13 +66,13 @@ export interface CreateBountyPayload {
   tokenSymbol: string;
   amount: number;
   deadlineDays: number;
-  labels: string[];
+  labels: GithubLabel[];
 }
 
 export interface OpenIssue {
   id: string;
   title: string;
-  labels: string[];
+  labels: GithubLabel[];
   summary: string;
   impact: "starter" | "core" | "advanced";
 }

@@ -1,7 +1,12 @@
-import { ReactNode } from "react";
-import { ArrowUpRight } from "lucide-react";
+import { ReactNode, useState, useCallback, useEffect, useRef } from "react";
+import { ArrowUpRight, Check, Clock, Copy, Share2, Printer } from "lucide-react";
+import { Bounty, BountyEvent, BountyStatus } from "./types";
+import BountyCountdown from "./BountyCountdown";
+import UsdAmount from "./UsdAmount";
+import { updateSocialMetaTags } from "./metaTags";
+import CopyIcon from "./CopyIcons";
+import { extendDeadline } from "./api";
 
-import type { Bounty, BountyStatus } from "./types";
 
 type BountyAction = "reserve" | "submit" | "release" | "refund";
 
@@ -12,13 +17,96 @@ type Props = {
   owner: string;
   avatarUrl: string;
   statusCopy: Record<BountyStatus, { label: string; description: string }>;
-  actionCopy: Record<BountyStatus, Array<{ action: BountyAction; label: string; title: string }>>;
+  actionCopy: Record<
+    BountyStatus,
+    Array<{ action: BountyAction; label: string; title: string }>
+  >;
   renderActionButton: (
     bounty: Bounty,
     action: { action: BountyAction; label: string; title: string },
   ) => ReactNode;
   formatTimestamp: (value?: number) => string;
 };
+
+function useBountyStatusAnnouncement(
+  bounty: Bounty | null,
+  statusCopy: Record<BountyStatus, { label: string; description: string }>,
+  clearAfterMs = 3000,
+) {
+  const previousStatusRef = useRef<{ id: string; status: BountyStatus } | null>(null);
+  const [announcement, setAnnouncement] = useState("");
+
+  useEffect(() => {
+    if (!bounty) {
+      previousStatusRef.current = null;
+      setAnnouncement("");
+      return;
+    }
+
+    const previous = previousStatusRef.current;
+    if (previous?.id === bounty.id && previous.status !== bounty.status) {
+      setAnnouncement(
+        `Bounty #${bounty.issueNumber} status changed to ${statusCopy[bounty.status].label}`,
+      );
+    }
+
+    previousStatusRef.current = { id: bounty.id, status: bounty.status };
+  }, [bounty, statusCopy]);
+
+  useEffect(() => {
+    if (!announcement) return;
+
+    const timeoutId = window.setTimeout(() => {
+      setAnnouncement("");
+    }, clearAfterMs);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [announcement, clearAfterMs]);
+
+  return announcement;
+}
+
+const EVENT_LABELS: Record<string, string> = {
+  created: "Bounty created",
+  reserved: "Bounty reserved",
+  submitted: "Work submitted",
+  released: "Payment released",
+  refunded: "Bounty refunded",
+  expired: "Bounty expired",
+};
+
+function BountyTimeline({ events, formatTimestamp }: { events: BountyEvent[]; formatTimestamp: (v?: number) => string }) {
+  if (!events || events.length === 0) return null;
+
+  const sorted = [...events].sort((a, b) => a.timestamp - b.timestamp);
+
+  return (
+    <div className="bounty-timeline">
+      <h3 className="bounty-timeline__title">
+        <Clock size={16} />
+        Activity timeline
+      </h3>
+      <ol className="bounty-timeline__list">
+        {sorted.map((event, index) => (
+          <li key={index} className={`bounty-timeline__item bounty-timeline__item--${event.type}`}>
+            <div className="bounty-timeline__dot" aria-hidden="true" />
+            <div className="bounty-timeline__content">
+              <strong className="bounty-timeline__event">
+                {EVENT_LABELS[event.type] ?? event.type}
+              </strong>
+              <time className="bounty-timeline__time" dateTime={new Date(event.timestamp * 1000).toISOString()}>
+                {formatTimestamp(event.timestamp)}
+              </time>
+              {event.actor && (
+                <span className="bounty-timeline__actor">by {event.actor}</span>
+              )}
+            </div>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
 
 export default function BountyDetailPage({
   bounty,
@@ -31,8 +119,43 @@ export default function BountyDetailPage({
   renderActionButton,
   formatTimestamp,
 }: Props) {
+
+  const statusAnnouncement = useBountyStatusAnnouncement(bounty, statusCopy);
+
+  useEffect(() => {
+    updateSocialMetaTags(bounty);
+    return () => {
+      updateSocialMetaTags(null);
+    };
+  }, [bounty]);
+
+  function handlePrint() {
+    window.print();
+  }
+
+  function handleShare() {
+    if (!bounty) return;
+    const permalink = `${window.location.origin}/bounties/${encodeURIComponent(bounty.id)}`;
+    navigator.clipboard.writeText(permalink).then(() => {
+      // Show brief confirmation
+      const button = document.querySelector('[aria-label="Share bounty"]') as HTMLButtonElement;
+      if (button) {
+        const originalText = button.innerHTML;
+        button.innerHTML = `<Share2 size={16} />Copied!`;
+        setTimeout(() => {
+          button.innerHTML = originalText;
+        }, 2000);
+      }
+    }).catch((err) => {
+      console.error("Failed to copy URL:", err);
+    });
+  }
+
   return (
     <div className="page-shell">
+      <div className="sr-only" aria-live="polite" aria-atomic="true">
+        {statusAnnouncement}
+      </div>
       <div className="glow glow-left" />
       <div className="glow glow-right" />
 
@@ -42,9 +165,27 @@ export default function BountyDetailPage({
             <span className="panel-kicker">Bounty</span>
             <h2>{bounty ? bounty.title : "Bounty"}</h2>
           </div>
-          <button type="button" className="secondary-button" onClick={onBack} disabled={loading}>
-            Back
-          </button>
+          <div className="panel-header__actions">
+            <button
+              type="button"
+              className="secondary-button print-button"
+              onClick={handlePrint}
+              disabled={loading || !bounty}
+              aria-label="Print / Export PDF"
+              title="Print / Export PDF"
+            >
+              <Printer size={16} />
+              Print / Export PDF
+            </button>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={onBack}
+              disabled={loading}
+            >
+              Back
+            </button>
+          </div>
         </div>
 
         {loading && !bounty ? (
@@ -54,7 +195,14 @@ export default function BountyDetailPage({
         ) : (
           <div className="bounty-detail__content">
             <div className="bounty-detail__hero">
-              {avatarUrl && <img className="repo-avatar" src={avatarUrl} alt={owner} loading="lazy" />}
+              {avatarUrl && (
+                <img
+                  className="repo-avatar"
+                  src={avatarUrl}
+                  alt={owner}
+                  loading="lazy"
+                />
+              )}
               <div>
                 <span
                   className={`status-pill status-pill--${bounty.status}`}
@@ -66,13 +214,19 @@ export default function BountyDetailPage({
               </div>
               <div className="amount-chip">
                 {bounty.amount} {bounty.tokenSymbol}
+                {(bounty.tokenSymbol === "XLM" || bounty.tokenSymbol === "USDC") && (
+                  <UsdAmount amount={bounty.amount} tokenSymbol={bounty.tokenSymbol} />
+                )}
               </div>
             </div>
 
             <div className="meta-grid meta-grid--detail">
               <div>
                 <span className="meta-label">Bounty ID</span>
-                <strong>{bounty.id}</strong>
+                <strong className="copy-row">
+                  {bounty.id}
+                  <CopyIcon text={bounty.id} label="bounty ID" />
+                </strong>
               </div>
               <div>
                 <span className="meta-label">Issue</span>
@@ -93,15 +247,26 @@ export default function BountyDetailPage({
               </div>
               <div>
                 <span className="meta-label">Deadline</span>
-                <strong>{formatTimestamp(bounty.deadlineAt)}</strong>
+                <strong>
+                  {formatTimestamp(bounty.deadlineAt)}{" "}
+                  <BountyCountdown deadlineAt={bounty.deadlineAt} status={bounty.status} />
+                </strong>
               </div>
               <div>
                 <span className="meta-label">Maintainer</span>
-                <strong>{bounty.maintainer}</strong>
+                <strong className="copy-row">
+                  {bounty.maintainer}
+                  <CopyIcon text={bounty.maintainer} label="maintainer wallet address" />
+                </strong>
               </div>
               <div>
                 <span className="meta-label">Contributor</span>
-                <strong>{bounty.contributor ?? "Open"}</strong>
+                <strong className="copy-row">
+                  {bounty.contributor ?? "Open"}
+                  {bounty.contributor && (
+                    <CopyIcon text={bounty.contributor} label="contributor address" />
+                  )}
+                </strong>
               </div>
               {bounty.reservedAt && (
                 <div>
@@ -130,29 +295,40 @@ export default function BountyDetailPage({
               {bounty.releasedTxHash && (
                 <div>
                   <span className="meta-label">Release tx</span>
-                  <strong>{bounty.releasedTxHash}</strong>
+                  <strong className="copy-row">
+                    {bounty.releasedTxHash}
+                    <CopyIcon text={bounty.releasedTxHash} label="release transaction hash" />
+                  </strong>
                 </div>
               )}
               {bounty.refundedTxHash && (
                 <div>
                   <span className="meta-label">Refund tx</span>
-                  <strong>{bounty.refundedTxHash}</strong>
+                  <strong className="copy-row">
+                    {bounty.refundedTxHash}
+                    <CopyIcon text={bounty.refundedTxHash} label="refund transaction hash" />
+                  </strong>
                 </div>
               )}
             </div>
 
             {bounty.labels.length > 0 && (
               <div className="chip-row chip-row--spaced">
-                {bounty.labels.map((label) => (
-                  <span className="chip" key={label}>
-                    {label}
-                  </span>
+                {bounty.labels.map((label: any) => (
+                  <span className="chip" key={label.name}>
+  {label.name}
+</span>
                 ))}
               </div>
             )}
 
             {bounty.submissionUrl && (
-              <a className="submission-link" href={bounty.submissionUrl} target="_blank" rel="noreferrer">
+              <a
+                className="submission-link"
+                href={bounty.submissionUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
                 Review submission <ArrowUpRight size={16} />
               </a>
             )}
@@ -164,15 +340,126 @@ export default function BountyDetailPage({
             )}
 
             <p className="status-helper">
-              <strong>{statusCopy[bounty.status].label}:</strong> {statusCopy[bounty.status].description}
+              <strong>{statusCopy[bounty.status].label}:</strong>{" "}
+              {statusCopy[bounty.status].description}
             </p>
 
             <div className="action-row action-row--detail">
-              {(actionCopy[bounty.status] ?? []).map((action) => renderActionButton(bounty, action))}
+              {(actionCopy[bounty.status] ?? []).map((action) =>
+                renderActionButton(bounty, action),
+              )}
             </div>
+
+            {owner === bounty.maintainer &&
+              !["released", "refunded"].includes(bounty.status) && (
+                <ExtendDeadlineControl bounty={bounty} formatTimestamp={formatTimestamp} />
+              )}
+
+            {bounty.events && bounty.events.length > 0 && (
+              <BountyTimeline events={bounty.events} formatTimestamp={formatTimestamp} />
+            )}
           </div>
         )}
       </section>
     </div>
+  );
+}
+
+/**
+ * Maintainer-only control to extend a bounty's deadline. Renders a date/time
+ * picker and submits the new deadline to the backend. The picker is bounded so
+ * a maintainer can only pick a moment strictly after the current deadline.
+ */
+export function ExtendDeadlineControl({
+  bounty,
+  formatTimestamp,
+}: {
+  bounty: Bounty;
+  formatTimestamp: (value?: number) => string;
+}) {
+  const [value, setValue] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  // datetime-local needs a "YYYY-MM-DDTHH:mm" string in local time. The minimum
+  // selectable value is one minute after the current deadline.
+  const minLocal = toDatetimeLocal((bounty.deadlineAt + 60) * 1000);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setSuccess(null);
+
+    if (!value) {
+      setError("Pick a new deadline date and time.");
+      return;
+    }
+
+    const newDeadline = Math.floor(new Date(value).getTime() / 1000);
+    if (Number.isNaN(newDeadline)) {
+      setError("That is not a valid date.");
+      return;
+    }
+    if (newDeadline <= bounty.deadlineAt) {
+      setError("New deadline must be later than the current deadline.");
+      return;
+    }
+    if (newDeadline <= Math.floor(Date.now() / 1000)) {
+      setError("New deadline must be in the future.");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const updated = await extendDeadline(bounty.id, bounty.maintainer, newDeadline);
+      setSuccess(`Deadline extended to ${formatTimestamp(updated.deadlineAt)}.`);
+      setValue("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to extend the deadline.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <form className="extend-deadline" onSubmit={handleSubmit}>
+      <label htmlFor="extend-deadline-input" className="meta-label">
+        Extend deadline
+      </label>
+      <div className="extend-deadline__row">
+        <input
+          id="extend-deadline-input"
+          type="datetime-local"
+          value={value}
+          min={minLocal}
+          onChange={(e) => setValue(e.target.value)}
+          disabled={submitting}
+        />
+        <button type="submit" className="secondary-button" disabled={submitting || !value}>
+          {submitting ? "Extending…" : "Extend Deadline"}
+        </button>
+      </div>
+      {error && (
+        <small className="field-error" role="alert">
+          {error}
+        </small>
+      )}
+      {success && (
+        <small className="field-hint" role="status">
+          {success}
+        </small>
+      )}
+    </form>
+  );
+}
+
+/** Convert a millisecond epoch to a `datetime-local`-compatible local string. */
+function toDatetimeLocal(epochMs: number): string {
+  const d = new Date(epochMs);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return (
+    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
+    `T${pad(d.getHours())}:${pad(d.getMinutes())}`
   );
 }

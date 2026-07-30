@@ -112,6 +112,67 @@ Soroban contract implementing on-chain escrow logic for trustless bounty payouts
 
 ## Bounty Lifecycle
 
+### Bounty Lifecycle Sequence
+
+This sequence diagram shows the main happy path from bounty creation through payout, plus the refund and dispute resolution branches.
+
+```mermaid
+sequenceDiagram
+    actor Maintainer
+    actor Contributor
+    actor Arbiter
+    participant Backend
+    participant Contract
+
+    Maintainer->>Backend: Create bounty
+    Backend->>Backend: Validate issue, reward, deadline
+    Backend->>Contract: create_bounty(maintainer, amount, token)
+    Contract-->>Backend: Bounty created, escrow funded
+    Backend-->>Maintainer: Bounty status: open
+
+    Contributor->>Backend: Reserve bounty
+    Backend->>Contract: reserve_bounty(bounty_id, contributor)
+    Contract-->>Backend: Bounty reserved
+    Backend-->>Contributor: Bounty status: reserved
+
+    Contributor->>Backend: Submit work with PR link
+    Backend->>Backend: Validate contributor and submission URL
+    Backend->>Contract: submit_bounty(bounty_id, submission_ref)
+    Contract-->>Backend: Bounty status: submitted
+    Backend-->>Maintainer: Submission ready for review
+
+    alt Maintainer approves submission
+        Maintainer->>Backend: Release payout
+        Backend->>Contract: release_bounty(bounty_id)
+        Contract-->>Contributor: Transfer escrowed funds
+        Contract-->>Backend: Bounty status: released
+        Backend-->>Maintainer: Release confirmed
+    else Maintainer cancels before accepted work
+        Maintainer->>Backend: Refund bounty
+        Backend->>Contract: refund_bounty(bounty_id)
+        Contract-->>Maintainer: Return escrowed funds
+        Contract-->>Backend: Bounty status: refunded
+        Backend-->>Maintainer: Refund confirmed
+    else Submission is disputed
+        Maintainer->>Backend: Open dispute
+        Backend->>Contract: dispute_bounty(bounty_id)
+        Contract-->>Backend: Bounty status: disputed
+        Backend-->>Arbiter: Request dispute review
+        Arbiter->>Backend: Resolve dispute
+        alt Arbiter awards contributor
+            Backend->>Contract: resolve_dispute(bounty_id, release)
+            Contract-->>Contributor: Transfer escrowed funds
+            Contract-->>Backend: Bounty status: released
+        else Arbiter awards maintainer
+            Backend->>Contract: resolve_dispute(bounty_id, refund)
+            Contract-->>Maintainer: Return escrowed funds
+            Contract-->>Backend: Bounty status: refunded
+        end
+        Backend-->>Maintainer: Dispute resolution recorded
+        Backend-->>Contributor: Dispute resolution recorded
+    end
+```
+
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
 │                              Bounty Lifecycle                                   │
@@ -166,6 +227,39 @@ Soroban contract implementing on-chain escrow logic for trustless bounty payouts
   SUBMITTED  → RELEASED   : Maintainer approves, funds paid out
   SUBMITTED  → (no refund): Submitted bounties must be reviewed
   ─────────────────────────────────────────────────────────────────────────────
+```
+
+### BountyStatus State Machine (Mermaid)
+
+```mermaid
+stateDiagram-v2
+    [*] --> Open : create_bounty
+    
+    Open --> Reserved : reserve_bounty
+    Open --> Expired : expire_if_needed
+    Open --> Refunded : refund_bounty
+    
+    Reserved --> Submitted : submit_bounty
+    Reserved --> Expired : expire_if_needed
+    Reserved --> Refunded : refund_bounty
+    
+    Submitted --> Released : release_bounty
+    Submitted --> Disputed : dispute_bounty
+    Submitted --> Refunded : refund_bounty
+    
+    Disputed --> Released : resolve_dispute(release=true)
+    Disputed --> Refunded : resolve_dispute(release=false)
+    Disputed --> Refunded : refund_bounty
+    
+    Expired --> Refunded : refund_bounty
+    
+    note right of Released
+        Invalid transitions explicitly excluded:
+        - Released -> Refunded (Terminal state)
+        - Refunded -> Released (Terminal state)
+        - Submitted -> Open (Cannot un-submit)
+        - Expired -> Open (Cannot revert expiration)
+    end note
 ```
 
 ## Interaction Sequence Diagrams

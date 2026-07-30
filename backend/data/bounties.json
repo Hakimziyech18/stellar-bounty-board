@@ -1,6 +1,6 @@
 [
   {
-    "id": "BNT-0090",
+
     "repo": "test/repo",
     "issueNumber": 9999,
     "title": "UNIQUE_XYZZY_TITLE",
@@ -10,6 +10,339 @@
     "amount": 10,
     "labels": [],
     "status": "open",
+
+    "version": 1,
+    "events": [
+      {
+        "type": "created",
+
+      }
+    ],
+    "reservationTimeoutSeconds": 604800
+  },
+  {
+
+    "repo": "test/repo",
+    "issueNumber": 9999,
+    "title": "UNIQUE_XYZZY_TITLE",
+    "summary": "some description",
+    "maintainer": "GAAAA",
+    "tokenSymbol": "XLM",
+    "amount": 10,
+    "labels": [],
+    "status": "open",
+
+    "version": 1,
+    "events": [
+      {
+        "type": "created",
+
+      }
+    ],
+    "reservationTimeoutSeconds": 604800
+  },
+  {
+
+    "repo": "owner/repo",
+    "issueNumber": 123,
+    "title": "Contract test bounty",
+    "summary": "A sufficiently long summary for the contract test.",
+    "maintainer": "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
+    "tokenSymbol": "XLM",
+    "amount": 10,
+    "labels": [
+      "help wanted"
+    ],
+
+    "repo": "test/repo",
+    "issueNumber": 9999,
+    "title": "UNIQUE_XYZZY_TITLE",
+    "summary": "some description",
+    "maintainer": "GAAAA",
+    "tokenSymbol": "XLM",
+    "amount": 10,
+    "labels": [],
+    "status": "open",
+
+    "version": 1,
+    "events": [
+      {
+        "type": "created",
+
+      }
+    ],
+    "reservationTimeoutSeconds": 604800
+  },
+  {
+
+    "repo": "owner/repo",
+    "issueNumber": 123,
+    "title": "Contract test bounty",
+    "summary": "A sufficiently long summary for the contract test.",
+    "maintainer": "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
+    "tokenSymbol": "XLM",
+    "amount": 10,
+    "labels": [
+      "help wanted"
+    ],
+
+    "repo": "test/repo",
+    "issueNumber": 9999,
+    "title": "UNIQUE_XYZZY_TITLE",
+    "summary": "some description",
+    "maintainer": "GAAAA",
+    "tokenSymbol": "XLM",
+    "amount": 10,
+    "labels": [],
+    "status": "open",
+
+    "version": 1,
+    "events": [
+      {
+        "type": "created",
+
+      }
+    ],
+    "reservationTimeoutSeconds": 604800
+  },
+  {
+
+    "repo": "owner/repo",
+    "issueNumber": 123,
+    "title": "Contract test bounty",
+    "summary": "A sufficiently long summary for the contract test.",
+    "maintainer": "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
+    "tokenSymbol": "XLM",
+    "amount": 10,
+    "labels": [
+      "help wanted"
+    ],
+    "status": "open",
+
+    "version": 1,
+    "events": [
+      {
+        "type": "created",
+
+      }
+    ],
+    "reservationTimeoutSeconds": 604800
+  },
+  {
+    "id": "BNT-0098",
+    "repo": "test/repo",
+    "issueNumber": 9999,
+    "title": "UNIQUE_XYZZY_TITLE",
+    "summary": "some description",
+    "maintainer": "GAAAA",
+    "tokenSymbol": "XLM",
+    "amount": 10,
+    "labels": [],
+    "status": "open",
+    "createdAt": 1780355160,
+    "deadlineAt": 1782947160,
+    "version": 1,
+    "events": [
+      {
+        "type": "created",
+        "timestamp": 1780355160
+      }
+    ],
+    "reservationTimeoutSeconds": 604800
+  },
+  {
+    "id": "BNT-0097",
+    "repo": "test/repo",
+    "issueNumber": 9999,
+    "title": "UNIQUE_XYZZY_TITLE",
+    "summary": "some description",
+    "maintainer": "GAAAA",
+    "tokenSymbol": "XLM",
+    "amount": 10,
+    "labels": [],
+    "status": "expired",
+    "createdAt": 1777400477,
+    "deadlineAt": 1779992477,
+    "version": 1,
+    "events": [
+      {
+        "type": "created",
+        "timestamp": 1777400477
+      },
+      {
+        "type": "expired",
+        "timestamp": 1780355160
+      }
+    ],
+    "reservationTimeoutSeconds": 604800
+  },
+  {
+    "id": "BNT-0096",
+    "repo": "test/repo",
+    "issueNumber": 9999,
+    "title": "UNIQUE_XYZZY_TITLE",
+    "summary": "some description",
+    "maintainer": "GAAAA",
+    "tokenSymbol": "XLM",
+    "amount": 10,
+    "labels": [],
+    "status": "expired",
+    "createdAt": 1777379157,
+    "deadlineAt": 1779971157,
+    "version": 1,
+    "events": [
+      {
+        "type": "created",
+        "timestamp": 1777379157
+      },
+      {
+        "type": "expired",
+        "timestamp": 1780355160
+      }
+    ],
+    "reservationTimeoutSeconds": 604800
+  },
+  {
+    "id": "BNT-0095",
+    "repo": "test/repo",
+    "issueNumber": 9999,
+    "title": "UNIQUE_XYZZY_TITLE",
+    "summary": "some description",
+    "maintainer": "GAAAA",
+    "tokenSymbol": "XLM",
+    "amount": 10,
+    "labels": [],
+    "status": "expired",
+    "createdAt": 1777377162,
+    "deadlineAt": 1779969162,
+    "version": 1,
+    "events": [
+      {
+        "type": "created",
+        "timestamp": 1777377162
+      },
+      {
+        "type": "expired",
+        "timestamp": 1780355160
+      }
+    ],
+    "reservationTimeoutSeconds": 604800
+  },
+  {
+    "id": "BNT-0094",
+    "repo": "test/repo",
+    "issueNumber": 9999,
+    "title": "UNIQUE_XYZZY_TITLE",
+    "summary": "some description",
+    "maintainer": "GAAAA",
+    "tokenSymbol": "XLM",
+    "amount": 10,
+    "labels": [],
+    "status": "expired",
+    "createdAt": 1777376302,
+    "deadlineAt": 1779968302,
+    "version": 1,
+    "events": [
+      {
+        "type": "created",
+        "timestamp": 1777376302
+      },
+      {
+        "type": "expired",
+        "timestamp": 1780355160
+      }
+    ],
+    "reservationTimeoutSeconds": 604800
+  },
+  {
+    "id": "BNT-0093",
+    "repo": "test/repo",
+    "issueNumber": 9999,
+    "title": "UNIQUE_XYZZY_TITLE",
+    "summary": "some description",
+    "maintainer": "GAAAA",
+    "tokenSymbol": "XLM",
+    "amount": 10,
+    "labels": [],
+    "status": "expired",
+    "createdAt": 1777375964,
+    "deadlineAt": 1779967964,
+    "version": 1,
+    "events": [
+      {
+        "type": "created",
+        "timestamp": 1777375964
+      },
+      {
+        "type": "expired",
+        "timestamp": 1780355160
+      }
+    ],
+    "reservationTimeoutSeconds": 604800
+  },
+  {
+    "id": "BNT-0092",
+    "repo": "test/repo",
+    "issueNumber": 9999,
+    "title": "UNIQUE_XYZZY_TITLE",
+    "summary": "some description",
+    "maintainer": "GAAAA",
+    "tokenSymbol": "XLM",
+    "amount": 10,
+    "labels": [],
+    "status": "expired",
+    "createdAt": 1777375843,
+    "deadlineAt": 1779967843,
+    "version": 1,
+    "events": [
+      {
+        "type": "created",
+        "timestamp": 1777375843
+      },
+      {
+        "type": "expired",
+        "timestamp": 1780355160
+      }
+    ],
+    "reservationTimeoutSeconds": 604800
+  },
+  {
+    "id": "BNT-0091",
+    "repo": "test/repo",
+    "issueNumber": 9999,
+    "title": "UNIQUE_XYZZY_TITLE",
+    "summary": "some description",
+    "maintainer": "GAAAA",
+    "tokenSymbol": "XLM",
+    "amount": 10,
+    "labels": [],
+    "status": "expired",
+    "createdAt": 1777375521,
+    "deadlineAt": 1779967521,
+    "version": 1,
+    "events": [
+      {
+        "type": "created",
+        "timestamp": 1777375521
+      },
+      {
+        "type": "expired",
+        "timestamp": 1780355160
+      }
+    ],
+    "reservationTimeoutSeconds": 604800
+  },
+  {
+    "id": "BNT-0090",
+    "repo": "test/repo",
+    "issueNumber": 9999,
+    "title": "UNIQUE_XYZZY_TITLE",
+    "summary": "some description",
+    "maintainer": "GAAAA",
+    "tokenSymbol": "XLM",
+    "amount": 10,
+    "labels": [],
+    "status": "expired",
     "createdAt": 1777223009,
     "deadlineAt": 1779815009,
     "version": 1,
@@ -17,6 +350,10 @@
       {
         "type": "created",
         "timestamp": 1777223009
+      },
+      {
+        "type": "expired",
+
       }
     ],
     "reservationTimeoutSeconds": 604800
