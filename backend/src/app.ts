@@ -1,6 +1,6 @@
 import cors from 'cors';
 import express, { Request, Response, NextFunction } from 'express';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import swaggerUi from 'swagger-ui-express';
 
 import { generateOpenApiDocument } from './docs/openapi';
@@ -57,6 +57,7 @@ import {
 import { idempotencyMiddleware } from './middleware/idempotency';
 import { requireJsonContentType } from './middleware/contentType';
 import { readLimiter, mutationLimiter } from './utils';
+import { maintainerLimiter } from './middleware/maintainerLimiter';
 import { logger } from './logger';
 import { createAdminApiKeyAuthMiddleware } from './middleware/adminAuth';
 import { handleGitHubPrEvent } from './webhooks/githubPrHandler';
@@ -395,8 +396,36 @@ app.get('/api/bounties', async (req: Request, res: Response) => {
     const data = all.slice(start, start + pageSize);
     const hasMore = start + data.length < total;
 
+    let maxTimestamp = 0;
+    for (const bounty of all) {
+      if (bounty.events && bounty.events.length > 0) {
+        const lastEvent = bounty.events[bounty.events.length - 1];
+        if (lastEvent.timestamp > maxTimestamp) {
+          maxTimestamp = lastEvent.timestamp;
+        }
+      } else if (bounty.createdAt > maxTimestamp) {
+        maxTimestamp = bounty.createdAt;
+      }
+    }
+
+    if (maxTimestamp > 0) {
+      const lastModifiedDate = new Date(maxTimestamp * 1000);
+      res.setHeader('Last-Modified', lastModifiedDate.toUTCString());
+    }
+
+    const responsePayload = { data, total, page, pageSize, hasMore };
+    const responseString = JSON.stringify(responsePayload);
+    const etag = `"${createHash('md5').update(responseString).digest('hex')}"`;
+    res.setHeader('ETag', etag);
+
+    if (req.headers['if-none-match'] === etag) {
+      res.status(304).end();
+      return;
+    }
+
     res.setHeader('X-Total-Count', String(total));
-    res.json({ data, total, page, pageSize, hasMore });
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.send(responseString);
   } catch (error) {
     sendError(res, req, error);
   }
@@ -522,6 +551,7 @@ app.post(
   '/api/bounties',
   mutationLimiter,
   requireJsonContentType,
+  maintainerLimiter,
   createBountyCreationSignatureMiddleware(),
   validateBody(createBountySchema),
   async (req: Request, res: Response) => {
