@@ -86,6 +86,39 @@ afterEach(() => {
 });
 
 describe("BountyDetailPage copy actions", () => {
+  it("copies the bounty URL from the share button", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+
+    renderDetail();
+
+    await userEvent.click(screen.getByRole("button", { name: /share bounty/i }));
+
+    expect(writeText).toHaveBeenCalledWith(
+      `http://localhost:3000/bounties/${encodeURIComponent("BNTY-42")}`
+    );
+    await waitFor(() => expect(screen.getByText("Copied!")).toBeInTheDocument());
+  });
+
+  it("shows fallback prompt when clipboard API fails", async () => {
+    const writeText = vi.fn().mockRejectedValue(new Error("Clipboard denied"));
+    Object.assign(navigator, { clipboard: { writeText } });
+    const promptSpy = vi.spyOn(window, "prompt").mockImplementation(() => null);
+
+    renderDetail();
+
+    await userEvent.click(screen.getByRole("button", { name: /share bounty/i }));
+
+    await waitFor(() => {
+      expect(promptSpy).toHaveBeenCalledWith(
+        "Copy the bounty URL manually:",
+        expect.stringContaining("/bounties/BNTY-42")
+      );
+    });
+
+    promptSpy.mockRestore();
+  });
+
   it("copies the bounty ID from the detail metadata", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.assign(navigator, { clipboard: { writeText } });
