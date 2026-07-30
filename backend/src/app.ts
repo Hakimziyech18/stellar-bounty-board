@@ -540,15 +540,7 @@ app.post(
   }
 );
 
-app.post('/api/bounties/:id/reserve', mutationLimiter, requireJsonContentType, idempotencyMiddleware, async (req: Request, res: Response) => {
-  const parsedBody = reserveBountySchema.safeParse(req.body);
-
-  if (!parsedBody.success) {
-    jsonError(res, req, 400, zodErrorMessage(parsedBody.error));
-    return;
-  }
-
-app.post('/api/bounties/:id/reserve', mutationLimiter, idempotencyMiddleware, validateBody(reserveBountySchema), async (req: Request, res: Response) => {
+app.post('/api/bounties/:id/reserve', mutationLimiter, requireJsonContentType, idempotencyMiddleware, validateBody(reserveBountySchema), async (req: Request, res: Response) => {
   try {
     const bounty = await reserveBounty(
       parseId(req.params.id),
@@ -562,15 +554,7 @@ app.post('/api/bounties/:id/reserve', mutationLimiter, idempotencyMiddleware, va
   }
 });
 
-app.post('/api/bounties/:id/submit', mutationLimiter, requireJsonContentType, idempotencyMiddleware, async (req: Request, res: Response) => {
-  const parsedBody = submitBountySchema.safeParse(req.body);
-
-  if (!parsedBody.success) {
-    jsonError(res, req, 400, zodErrorMessage(parsedBody.error));
-    return;
-  }
-
-app.post('/api/bounties/:id/submit', mutationLimiter, idempotencyMiddleware, validateBody(submitBountySchema), async (req: Request, res: Response) => {
+app.post('/api/bounties/:id/submit', mutationLimiter, requireJsonContentType, idempotencyMiddleware, validateBody(submitBountySchema), async (req: Request, res: Response) => {
   try {
     const bounty = await submitBounty(
       parseId(req.params.id),
@@ -748,7 +732,10 @@ app.post(
 
 app.get('/api/open-issues', async (_req: Request, res: Response) => {
   try {
-
+    const issues = await listOpenIssues();
+    res.json({ data: issues });
+  } catch (error) {
+    sendError(res, _req, error, 500);
   }
 });
 
