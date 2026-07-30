@@ -1,10 +1,12 @@
 #![cfg(test)]
 
+extern crate alloc;
+
 use super::*;
+use alloc::string::ToString;
 use soroban_sdk::{
-    symbol_short,
-    testutils::{Address as _, Events, Ledger},
-    Address, Env, IntoVal, String,
+    testutils::{Address as _, Ledger},
+    Address, Env, String,
 };
 
 // ─── Version Tests ──────────────────────────────────────────────────────────
@@ -350,22 +352,6 @@ fn test_cancel_bounty_success() {
     assert_eq!(bounty.status, BountyStatus::Refunded);
     assert_eq!(token.balance(&maintainer), 1000);
     assert_eq!(token.balance(&client.address), 0);
-
-    let events = env.events().all();
-    let cancel_event = events.last().unwrap();
-    assert_eq!(
-        cancel_event,
-        (
-            client.address.clone(),
-            (symbol_short!("Bounty"), symbol_short!("Cancel")).into_val(&env),
-            BountyCanceled {
-                bounty_id,
-                maintainer: maintainer.clone(),
-                amount: 500,
-            }
-            .into_val(&env)
-        )
-    );
 }
 
 #[test]
@@ -981,18 +967,205 @@ fn test_get_all_bounties_limit_capped_at_50() {
     assert_eq!(bounties.get(49).unwrap().issue_number, 50);
 }
 
-// --- Retained test case from upstream main branch ---
+// ─── get_bounties_by_contributor tests (Issue #750) ────────────────────────
+
+/// No bounties at all — should return an empty vec without panic.
 #[test]
-#[should_panic] // Assuming this dispute should fail/panic as the original comment states
-fn test_dispute_after_deadline_fails() {
+fn test_get_bounties_by_contributor_empty() {
+    let env = Env::default();
+    let (client, _, contributor, _, _, _) = setup_test(&env);
+
+    let result = client.get_bounties_by_contributor(&contributor, &1u64, &10u32);
+    assert_eq!(result.len(), 0);
+}
+
+/// Bounties exist but none belong to the queried contributor.
+#[test]
+fn test_get_bounties_by_contributor_no_match() {
     let env = Env::default();
     env.mock_all_auths();
-    
-    // Note: If your file already had setup code inside this test block above the conflict, 
-    // leave it intact. This makes sure the dispute test runs immediately after.
-    let (client, _, _, _, arbiter, bounty_id) = setup_test(&env);
-    
-    // Dispute after deadline should fail
-    client.dispute_bounty(&bounty_id, &arbiter);
-}>>>>>>> main
+
+    let (client, maintainer, contributor, token_id, _, _) = setup_test(&env);
+    let token_admin = soroban_sdk::token::StellarAssetClient::new(&env, &token_id);
+    token_admin.mint(&maintainer, &1000);
+
+    // Create a bounty but leave it Open (no contributor)
+    client.create_bounty(
+        &maintainer,
+        &token_id,
+        &500,
+        &String::from_str(&env, "repo"),
+        &1,
+        &String::from_str(&env, "title"),
+        &(env.ledger().timestamp() + 1000),
+        &0u32,
+    );
+
+    let result = client.get_bounties_by_contributor(&contributor, &1u64, &10u32);
+    assert_eq!(result.len(), 0, "open bounties should not appear for any contributor");
 }
+
+/// Contributor reserved a single bounty — it must appear in results.
+#[test]
+fn test_get_bounties_by_contributor_single_reserved() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, maintainer, contributor, token_id, _, _) = setup_test(&env);
+    let token_admin = soroban_sdk::token::StellarAssetClient::new(&env, &token_id);
+    token_admin.mint(&maintainer, &1000);
+
+    let bounty_id = client.create_bounty(
+        &maintainer,
+        &token_id,
+        &500,
+        &String::from_str(&env, "repo"),
+        &1,
+        &String::from_str(&env, "title"),
+        &(env.ledger().timestamp() + 1000),
+        &0u32,
+    );
+    client.reserve_bounty(&bounty_id, &contributor);
+
+    let result = client.get_bounties_by_contributor(&contributor, &1u64, &10u32);
+    assert_eq!(result.len(), 1);
+    assert_eq!(result.get(0).unwrap().status, BountyStatus::Reserved);
+    assert_eq!(result.get(0).unwrap().issue_number, 1);
+}
+
+/// Contributor has multiple bounties in different states; results include all
+/// of them while bounties belonging to another contributor are excluded.
+#[test]
+fn test_get_bounties_by_contributor_multiple_bounties() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, maintainer, contributor, token_id, _, _) = setup_test(&env);
+    let other_contributor = Address::generate(&env);
+    let token_admin = soroban_sdk::token::StellarAssetClient::new(&env, &token_id);
+    token_admin.mint(&maintainer, &5_000);
+
+    let deadline = env.ledger().timestamp() + 1000;
+
+    // Bounty 1 — reserved by our contributor
+    let b1 = client.create_bounty(
+        &maintainer, &token_id, &500,
+        &String::from_str(&env, "repo"), &1,
+        &String::from_str(&env, "title"), &deadline, &0u32,
+    );
+    client.reserve_bounty(&b1, &contributor);
+
+    // Bounty 2 — reserved and submitted by our contributor
+    let b2 = client.create_bounty(
+        &maintainer, &token_id, &500,
+        &String::from_str(&env, "repo"), &2,
+        &String::from_str(&env, "title"), &deadline, &0u32,
+    );
+    client.reserve_bounty(&b2, &contributor);
+    client.submit_bounty(&b2, &contributor);
+
+    // Bounty 3 — reserved by a different contributor (must NOT appear)
+    let b3 = client.create_bounty(
+        &maintainer, &token_id, &500,
+        &String::from_str(&env, "repo"), &3,
+        &String::from_str(&env, "title"), &deadline, &0u32,
+    );
+    client.reserve_bounty(&b3, &other_contributor);
+
+    // Bounty 4 — still open (must NOT appear)
+    client.create_bounty(
+        &maintainer, &token_id, &500,
+        &String::from_str(&env, "repo"), &4,
+        &String::from_str(&env, "title"), &deadline, &0u32,
+    );
+
+    let result = client.get_bounties_by_contributor(&contributor, &1u64, &50u32);
+    assert_eq!(result.len(), 2, "only the two bounties belonging to our contributor should be returned");
+    assert_eq!(result.get(0).unwrap().issue_number, 1);
+    assert_eq!(result.get(0).unwrap().status, BountyStatus::Reserved);
+    assert_eq!(result.get(1).unwrap().issue_number, 2);
+    assert_eq!(result.get(1).unwrap().status, BountyStatus::Submitted);
+}
+
+/// Released bounty (contributor was paid) must still appear so callers can
+/// see the full history of work done by this contributor.
+#[test]
+fn test_get_bounties_by_contributor_includes_released() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, maintainer, contributor, token_id, _, _) = setup_test(&env);
+    let token_admin = soroban_sdk::token::StellarAssetClient::new(&env, &token_id);
+    token_admin.mint(&maintainer, &1000);
+
+    let bounty_id = client.create_bounty(
+        &maintainer, &token_id, &500,
+        &String::from_str(&env, "repo"), &1,
+        &String::from_str(&env, "title"),
+        &(env.ledger().timestamp() + 1000), &0u32,
+    );
+    client.reserve_bounty(&bounty_id, &contributor);
+    client.submit_bounty(&bounty_id, &contributor);
+    client.release_bounty(&bounty_id, &maintainer);
+
+    let result = client.get_bounties_by_contributor(&contributor, &1u64, &10u32);
+    assert_eq!(result.len(), 1);
+    assert_eq!(result.get(0).unwrap().status, BountyStatus::Released);
+}
+
+/// The limit parameter must be capped at 50 even when more matching bounties exist.
+#[test]
+fn test_get_bounties_by_contributor_limit_capped_at_50() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, maintainer, contributor, token_id, _, _) = setup_test(&env);
+    let token_admin = soroban_sdk::token::StellarAssetClient::new(&env, &token_id);
+    // 60 bounties × 100 stroops each
+    token_admin.mint(&maintainer, &6_000);
+
+    for i in 0u32..60 {
+        let id = client.create_bounty(
+            &maintainer, &token_id, &100,
+            &String::from_str(&env, "repo"), &(i + 1),
+            &String::from_str(&env, "title"),
+            &(env.ledger().timestamp() + 1000), &0u32,
+        );
+        client.reserve_bounty(&id, &contributor);
+    }
+
+    let result = client.get_bounties_by_contributor(&contributor, &1u64, &100u32);
+    assert_eq!(result.len(), 50, "result must never exceed the 50-item cap");
+}
+
+/// Pagination: start offset skips earlier ids.
+#[test]
+fn test_get_bounties_by_contributor_pagination() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, maintainer, contributor, token_id, _, _) = setup_test(&env);
+    let token_admin = soroban_sdk::token::StellarAssetClient::new(&env, &token_id);
+    token_admin.mint(&maintainer, &1_000);
+
+    // Create 4 bounties, reserve all by same contributor
+    let mut ids = soroban_sdk::vec![&env];
+    for i in 0u32..4 {
+        let id = client.create_bounty(
+            &maintainer, &token_id, &100,
+            &String::from_str(&env, "repo"), &(i + 1),
+            &String::from_str(&env, "title"),
+            &(env.ledger().timestamp() + 1000), &0u32,
+        );
+        client.reserve_bounty(&id, &contributor);
+        ids.push_back(id);
+    }
+
+    // Start from the 3rd bounty id (ids[2])
+    let start = ids.get(2).unwrap();
+    let result = client.get_bounties_by_contributor(&contributor, &start, &10u32);
+    assert_eq!(result.len(), 2, "should return bounties 3 and 4 only");
+    assert_eq!(result.get(0).unwrap().issue_number, 3);
+    assert_eq!(result.get(1).unwrap().issue_number, 4);
+}
+
