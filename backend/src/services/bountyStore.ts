@@ -806,7 +806,7 @@ export async function submitBounty(
       throw new Error("Only the reserved contributor can submit this bounty.");
     }
 
-    validateGithubPrUrlForRepo(submissionUrl, bounty.repo);
+    await validateGithubPrUrlForRepo(submissionUrl, bounty.repo, bounty.issueNumber);
 
     const now = nowInSeconds();
     const updated: BountyRecord = {
