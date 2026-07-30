@@ -40,6 +40,24 @@ pub struct Bounty {
     pub dispute_raised_at: u64,
 }
 
+/// Token allowlist configuration — restricts which SAC tokens can fund bounties
+#[contracttype]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AllowlistConfig {
+    pub enabled: bool,
+    pub allowed_tokens: Vec<Address>,
+}
+
+impl Default for AllowlistConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            allowed_tokens: Vec::new(),
+        }
+    }
+}
+
+
 /// Cumulative fee statistics updated on every payout release.
 #[contracttype]
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -688,4 +706,65 @@ fn expire_if_needed(env: &Env, bounty: &mut Bounty) {
     {
         bounty.status = BountyStatus::Expired;
     }
+
+/// Check if a token is allowed to fund bounties
+fn is_token_allowed(e: &Env, token: &Address) -> bool {
+    e.storage()
+        .instance()
+        .get::<_, AllowlistConfig>(&DataKey::AllowlistConfig)
+        .map(|config| {
+            if !config.enabled {
+                return true;
+            }
+            config.allowed_tokens.contains(token)
+        })
+        .unwrap_or(true) // No config = allow all
+}
+
+/// Admin: set allowlist enabled state
+pub fn set_allowlist_enabled(e: &Env, admin: Address, enabled: bool) {
+    admin.require_auth();
+    let mut config = e.storage()
+        .instance()
+        .get::<_, AllowlistConfig>(&DataKey::AllowlistConfig)
+        .unwrap_or_default();
+    config.enabled = enabled;
+    e.storage().instance().set(&DataKey::AllowlistConfig, &config);
+}
+
+/// Admin: add a token to the allowlist
+pub fn add_allowed_token(e: &Env, admin: Address, token: Address) {
+    admin.require_auth();
+    let mut config = e.storage()
+        .instance()
+        .get::<_, AllowlistConfig>(&DataKey::AllowlistConfig)
+        .unwrap_or_default();
+    if !config.allowed_tokens.contains(&token) {
+        config.allowed_tokens.push(token);
+        e.storage().instance().set(&DataKey::AllowlistConfig, &config);
+        e.events().publish(
+            (symbol_short!("allowlist"), symbol_short!("add")),
+            token,
+        );
+    }
+}
+
+/// Admin: remove a token from the allowlist
+pub fn remove_allowed_token(e: &Env, admin: Address, token: Address) {
+    admin.require_auth();
+    let mut config = e.storage()
+        .instance()
+        .get::<_, AllowlistConfig>(&DataKey::AllowlistConfig)
+        .unwrap_or_default();
+    let before = config.allowed_tokens.len();
+    config.allowed_tokens.retain(|t| t != &token);
+    if config.allowed_tokens.len() < before {
+        e.storage().instance().set(&DataKey::AllowlistConfig, &config);
+        e.events().publish(
+            (symbol_short!("allowlist"), symbol_short!("remove")),
+            token,
+        );
+    }
+}
+
 }
