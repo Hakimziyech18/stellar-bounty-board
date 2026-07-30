@@ -82,6 +82,14 @@ pub struct BountyReserved {
 
 #[contracttype]
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BountyReassigned {
+    pub bounty_id: u64,
+    pub old_contributor: Address,
+    pub new_contributor: Address,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BountySubmitted {
     pub bounty_id: u64,
     pub contributor: Address,
@@ -183,7 +191,7 @@ impl StellarBountyBoardContract {
         // Soroban SDK versions this may be optional for static strings.
         String::from_str(&_env, CONTRACT_VERSION)
     }
-    
+
     pub fn initialize(env: Env, fee_recipient: Address, arbiter: Address, dispute_window: u64) {
         // Prevent re-initialization
         if env.storage().persistent().has(&DataKey::FeeRecipient) {
@@ -298,6 +306,43 @@ impl StellarBountyBoardContract {
             BountyReserved {
                 bounty_id,
                 contributor,
+            },
+        );
+    }
+
+    pub fn reassign_bounty(
+        env: Env,
+        bounty_id: u64,
+        maintainer: Address,
+        new_contributor: Address,
+    ) {
+        maintainer.require_auth();
+
+        let mut bounty = read_bounty(&env, bounty_id);
+        expire_if_needed(&env, &mut bounty);
+
+        if bounty.maintainer != maintainer {
+            panic_error(ContractError::MaintainerMismatch);
+        }
+
+        if bounty.status != BountyStatus::Reserved {
+            panic_error(ContractError::BountyMustBeReserved);
+        }
+
+        let old_contributor = bounty
+            .contributor
+            .clone()
+            .unwrap_or_else(|| panic_error(ContractError::MissingContributor));
+
+        bounty.contributor = Some(new_contributor.clone());
+        write_bounty(&env, bounty_id, &bounty);
+
+        env.events().publish(
+            (symbol_short!("Bounty"), symbol_short!("Reassign")),
+            BountyReassigned {
+                bounty_id,
+                old_contributor,
+                new_contributor,
             },
         );
     }
@@ -611,13 +656,6 @@ impl StellarBountyBoardContract {
             .unwrap_or(0)
     }
 
-pub fn get_next_bounty_id(env: Env) -> u64 {
-        env.storage()
-            .persistent()
-            .get(&DataKey::NextBountyId)
-            .unwrap_or(0)
-    }
-
     /// Read-only view function to enumerate bounties on-chain.
     pub fn get_all_bounties(env: Env, start: u64, limit: u32) -> Vec<Bounty> {
         let enforced_limit = if limit > 50 { 50 } else { limit };
@@ -665,7 +703,22 @@ pub fn get_next_bounty_id(env: Env) -> u64 {
                 bounty_count: 0,
             })
     }
-} main
+}
+
+fn accumulate_fee_stats(env: &Env, collected_fee: i128) {
+    let mut stats: FeeStats = env
+        .storage()
+        .persistent()
+        .get(&DataKey::FeeStats)
+        .unwrap_or(FeeStats {
+            total_collected: 0,
+            bounty_count: 0,
+        });
+
+    stats.total_collected += collected_fee;
+    stats.bounty_count += 1;
+
+    env.storage().persistent().set(&DataKey::FeeStats, &stats);
 }
 
 fn read_bounty(env: &Env, bounty_id: u64) -> Bounty {
