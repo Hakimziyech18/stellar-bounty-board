@@ -75,6 +75,7 @@ const EVENT_LABELS: Record<string, string> = {
   released: "Payment released",
   refunded: "Bounty refunded",
   expired: "Bounty expired",
+  disputed: "Dispute raised",
 };
 
 function BountyTimeline({ events, formatTimestamp }: { events: BountyEvent[]; formatTimestamp: (v?: number) => string }) {
