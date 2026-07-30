@@ -1667,6 +1667,86 @@ select {
   }
 }
 
+/* ---- Disconnect confirmation modal ---- */
+
+.disconnect-modal {
+  border: none;
+  border-radius: 28px;
+  padding: 0;
+  background: var(--surface-strong);
+  box-shadow: 0 32px 100px rgba(60, 43, 17, 0.22);
+  max-width: 400px;
+  width: calc(100% - 32px);
+}
+
+.disconnect-modal::backdrop {
+  background: rgba(31, 36, 33, 0.48);
+  backdrop-filter: blur(4px);
+}
+
+.disconnect-modal__inner {
+  position: relative;
+  padding: 28px;
+  display: grid;
+  gap: 18px;
+}
+
+.disconnect-modal__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.disconnect-modal__header h2 {
+  margin: 6px 0 0;
+  font-size: 1.4rem;
+}
+
+.disconnect-modal__body {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.disconnect-modal__actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+@media (max-width: 480px) {
+  .disconnect-modal__actions {
+    flex-direction: column-reverse;
+  }
+
+  .disconnect-modal__actions button {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+.primary-button--danger {
+  background: #d32f2f;
+  color: #fff;
+  border: none;
+}
+
+.primary-button--danger:hover {
+  background: #b71c1c;
+}
+
+[data-theme="dark"] .primary-button--danger {
+  background: #e53935;
+  color: #fff;
+}
+
+[data-theme="dark"] .primary-button--danger:hover {
+  background: #c62828;
+}
+
 /* ── Copy-to-clipboard ────────────────────────────────────────────────── */
 
 .copy-row {
