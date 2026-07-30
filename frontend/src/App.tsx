@@ -534,6 +534,7 @@ function App() {
             actionCopy={actionCopy}
             renderActionButton={renderActionButton}
             formatTimestamp={formatTimestamp}
+            bounties={bounties}
           />
         </Suspense>
       </ErrorBoundary>
