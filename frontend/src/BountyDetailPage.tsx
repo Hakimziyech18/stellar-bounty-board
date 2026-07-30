@@ -368,10 +368,9 @@ export default function BountyDetailPage({
               )}
             </div>
 
-            {owner === bounty.maintainer &&
-              !["released", "refunded"].includes(bounty.status) && (
-                <ExtendDeadlineControl bounty={bounty} formatTimestamp={formatTimestamp} />
-              )}
+            {!["released", "refunded"].includes(bounty.status) && (
+              <ExtendDeadlineControl bounty={bounty} formatTimestamp={formatTimestamp} />
+            )}
 
             {bounty.events && bounty.events.length > 0 && (
               <BountyTimeline events={bounty.events} formatTimestamp={formatTimestamp} />
