@@ -1755,4 +1755,158 @@ fn test_dispute_and_resolve_succeed_while_paused() {
     let bounty = client.get_bounty(&bounty_id);
     assert_eq!(bounty.status, BountyStatus::Released);
     assert_eq!(token.balance(&contributor), 500);
+
+    // ─── FeeStats Tests ─────────────────────────────────────────────────────────
+
+#[test]
+fn test_fee_stats_release_and_dispute_release_paths() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, maintainer, contributor, token_id, fee_recipient, arbiter) = setup_test(&env);
+    let token = TokenClient::new(&env, &token_id);
+    let token_admin = soroban_sdk::token::StellarAssetClient::new(&env, &token_id);
+    token_admin.mint(&maintainer, &10_000);
+
+    // ── Bounty 1: Released via normal release_bounty path ──────────────────
+    // 500 amount, 100 bps (1%) fee → fee = 5
+    let bounty_id_1 = client.create_bounty(
+        &maintainer,
+        &token_id,
+        &500,
+        &String::from_str(&env, "repo1"),
+        &1,
+        &String::from_str(&env, "title1"),
+        &(env.ledger().timestamp() + 10_000),
+        &100u32, // 1% fee
+        &None,
+    );
+    client.reserve_bounty(&bounty_id_1, &contributor);
+    client.submit_bounty(&bounty_id_1, &contributor);
+    client.release_bounty(&bounty_id_1, &maintainer);
+
+    let stats_after_release = client.get_fee_stats();
+    assert_eq!(stats_after_release.bounty_count, 1);
+    assert_eq!(stats_after_release.total_collected, 5); // 500 * 1% = 5
+
+    // ── Bounty 2: Released via resolve_dispute path ────────────────────────
+    // 1000 amount, 500 bps (5%) fee → fee = 50
+    let bounty_id_2 = client.create_bounty(
+        &maintainer,
+        &token_id,
+        &1000,
+        &String::from_str(&env, "repo2"),
+        &2,
+        &String::from_str(&env, "title2"),
+        &(env.ledger().timestamp() + 10_000),
+        &500u32, // 5% fee
+        &None,
+    );
+    let contributor_2 = Address::generate(&env);
+    client.reserve_bounty(&bounty_id_2, &contributor_2);
+    client.submit_bounty(&bounty_id_2, &contributor_2);
+    client.dispute_bounty(&bounty_id_2, &arbiter);
+
+    // Advance past dispute window
+    env.ledger().set_timestamp(env.ledger().timestamp() + 600);
+    client.resolve_dispute(&bounty_id_2, &true); // release = true
+
+    let stats_after_dispute = client.get_fee_stats();
+    assert_eq!(stats_after_dispute.bounty_count, 2);
+    assert_eq!(stats_after_dispute.total_collected, 55); // 5 + 50 = 55
+
+    // ── Verify token balances ──────────────────────────────────────────────
+    // Bounty 1: contributor got 495 (500 - 5 fee)
+    assert_eq!(token.balance(&contributor), 495);
+    // Bounty 2: contributor_2 got 950 (1000 - 50 fee)
+    assert_eq!(token.balance(&contributor_2), 950);
+    // Fee recipient got 55 total
+    assert_eq!(token.balance(&fee_recipient), 55);
+}
+
+#[test]
+fn test_fee_stats_refunded_bounty_does_not_increment() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, maintainer, contributor, token_id, _fee_recipient, _arbiter) = setup_test(&env);
+    let token = TokenClient::new(&env, &token_id);
+    let token_admin = soroban_sdk::token::StellarAssetClient::new(&env, &token_id);
+    token_admin.mint(&maintainer, &10_000);
+
+    // ── Bounty 1: Released with fee ────────────────────────────────────────
+    let bounty_id_1 = client.create_bounty(
+        &maintainer,
+        &token_id,
+        &500,
+        &String::from_str(&env, "repo1"),
+        &1,
+        &String::from_str(&env, "title1"),
+        &(env.ledger().timestamp() + 10_000),
+        &100u32, // 1% fee
+        &None,
+    );
+    client.reserve_bounty(&bounty_id_1, &contributor);
+    client.submit_bounty(&bounty_id_1, &contributor);
+    client.release_bounty(&bounty_id_1, &maintainer);
+
+    let stats_after_release = client.get_fee_stats();
+    assert_eq!(stats_after_release.bounty_count, 1);
+    assert_eq!(stats_after_release.total_collected, 5);
+
+    // ── Bounty 2: Refunded (no fee should be collected) ────────────────────
+    let bounty_id_2 = client.create_bounty(
+        &maintainer,
+        &token_id,
+        &1000,
+        &String::from_str(&env, "repo2"),
+        &2,
+        &String::from_str(&env, "title2"),
+        &(env.ledger().timestamp() + 1000),
+        &500u32, // 5% fee — but refunded, so fee should NOT apply
+        &None,
+    );
+    client.reserve_bounty(&bounty_id_2, &contributor);
+    // Advance past deadline
+    env.ledger().set_timestamp(env.ledger().timestamp() + 1001);
+    client.refund_bounty(&bounty_id_2, &maintainer);
+
+    // FeeStats should be unchanged after refund
+    let stats_after_refund = client.get_fee_stats();
+    assert_eq!(stats_after_refund.bounty_count, 1);
+    assert_eq!(stats_after_refund.total_collected, 5);
+
+    // ── Bounty 3: Dispute resolved with refund (no fee) ───────────────────
+    let bounty_id_3 = client.create_bounty(
+        &maintainer,
+        &token_id,
+        &2000,
+        &String::from_str(&env, "repo3"),
+        &3,
+        &String::from_str(&env, "title3"),
+        &(env.ledger().timestamp() + 10_000),
+        &1000u32, // 10% fee — but dispute resolved as refund, so fee should NOT apply
+        &None,
+    );
+    let contributor_3 = Address::generate(&env);
+    client.reserve_bounty(&bounty_id_3, &contributor_3);
+    client.submit_bounty(&bounty_id_3, &contributor_3);
+    client.dispute_bounty(&bounty_id_3, &arbiter);
+
+    env.ledger().set_timestamp(env.ledger().timestamp() + 600);
+    client.resolve_dispute(&bounty_id_3, &false); // release = false → refund
+
+    // FeeStats should still be unchanged
+    let stats_after_dispute_refund = client.get_fee_stats();
+    assert_eq!(stats_after_dispute_refund.bounty_count, 1);
+    assert_eq!(stats_after_dispute_refund.total_collected, 5);
+
+    // Maintainer should have full refund amounts back for bounties 2 and 3
+    // Initial: 10_000
+    // Bounty 1: -500 (created, released — 495 to contributor, 5 fee)
+    // Bounty 2: -1000 (created, refunded back)
+    // Bounty 3: -2000 (created, refunded back)
+    // Remaining: 10_000 - 500 - 1000 - 2000 + 1000 + 2000 = 9_500
+    assert_eq!(token.balance(&maintainer), 9_500);
+}
 }
