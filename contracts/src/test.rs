@@ -1036,5 +1036,34 @@ fn test_dispute_after_deadline_fails() {
     
     // Dispute after deadline should fail
     client.dispute_bounty(&bounty_id, &arbiter);
-}>>>>>>> main
 }
+
+// ─── Double-refund after cancel_bounty test (#747) ────────────────────────
+
+#[test]
+#[should_panic(expected = "BountyAlreadyFinalized")]
+fn test_double_refund_after_cancel_bounty() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, maintainer, _, token_id, _, _) = setup_test(&env);
+    let token_admin = soroban_sdk::token::StellarAssetClient::new(&env, &token_id);
+    token_admin.mint(&maintainer, &1_000_000);
+
+    let bounty_id = client.create_bounty(
+        &maintainer,
+        &token_id,
+        &500,
+        &String::from_str(&env, "repo"),
+        &1,
+        &String::from_str(&env, "title"),
+        &(env.ledger().timestamp() + 1000),
+        &0u32,
+    );
+
+    client.cancel_bounty(&bounty_id, &maintainer);
+
+    // Attempting to refund a canceled (already refunded) bounty should panic
+    client.refund_bounty(&bounty_id, &maintainer);
+}
+
