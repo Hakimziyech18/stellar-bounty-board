@@ -53,6 +53,7 @@ export type BountyTransitionType =
   | "cancel"
   | "expire"
   | "dispute"
+  | "resolve_dispute"
   | "update_notes"
   | "extend_deadline";
 
@@ -61,7 +62,7 @@ export type BountyTransitionType =
  */
 export interface BountyEvent {
   /** The type of event (usually matches the resulting status or "created"). */
-  type: BountyStatus | "created" | "notes_updated" | "deadline_extended";
+  type: BountyStatus | "created" | "notes_updated" | "deadline_extended" | "archived";
   /** Unix timestamp in seconds when the event occurred. */
   timestamp: number;
   /** Stellar public key of the actor who triggered the event. */
@@ -150,6 +151,8 @@ export interface BountyRecord {
   disputedAt?: number;
   /** Reason provided by the contributor for disputing the bounty. */
   disputeReason?: string;
+  /** Unix timestamp in seconds of the last admin alert sent for this stuck dispute. */
+  lastDisputeAlertAt?: number;
   // Race condition prevention
   /** Version number of the record used for optimistic locking. */
   version: number;
@@ -159,6 +162,11 @@ export interface BountyRecord {
   // Reservation timeout (in seconds from reservation)
   /** Number of seconds after reservation before it automatically times out. */
   reservationTimeoutSeconds?: number;
+  // Soft-archive flag
+  /** When true, the bounty has been archived and is excluded from active listings. */
+  archived?: boolean;
+  /** Unix timestamp in seconds of when the bounty was archived. */
+  archivedAt?: number;
 }
 
 /**
@@ -826,7 +834,7 @@ export async function submitBounty(
       throw new Error("Only the reserved contributor can submit this bounty.");
     }
 
-    validateGithubPrUrlForRepo(submissionUrl, bounty.repo);
+    await validateGithubPrUrlForRepo(submissionUrl, bounty.repo, bounty.issueNumber);
 
     const now = nowInSeconds();
     const updated: BountyRecord = {
@@ -1177,6 +1185,69 @@ export async function disputeBounty(
         message: err instanceof Error ? err.message : String(err),
       }),
     );
+
+    return persisted;
+  });
+}
+
+export async function resolveDisputeBounty(
+  id: string,
+  arbiter: string,
+  release: boolean,
+  transactionHash?: string,
+): Promise<BountyRecord> {
+  return withStoreLock(async () => {
+    const records = listBounties();
+    const bounty = findBounty(records, id);
+
+    if (bounty.status !== "disputed") {
+      throw new Error("Only disputed bounties can be resolved.");
+    }
+
+    const configuredArbiter = process.env.ARBITER_ADDRESS?.trim();
+    if (configuredArbiter && arbiter !== configuredArbiter) {
+      throw new Error("Only the configured arbiter can resolve disputes.");
+    }
+
+    const now = nowInSeconds();
+    const updated: BountyRecord = {
+      ...bounty,
+      status: release ? "released" : "refunded",
+      releasedAt: release ? now : bounty.releasedAt,
+      releasedTxHash: release
+        ? transactionHash?.trim() || bounty.releasedTxHash
+        : bounty.releasedTxHash,
+      refundedAt: release ? bounty.refundedAt : now,
+      refundedTxHash: release
+        ? bounty.refundedTxHash
+        : transactionHash?.trim() || bounty.refundedTxHash,
+      version: bounty.version + 1,
+      events: [
+        ...bounty.events,
+        {
+          type: release ? "released" : "refunded",
+          timestamp: now,
+          actor: arbiter,
+          details: { resolution: release ? "released" : "refunded" },
+        },
+      ],
+    };
+
+    const persisted = persistUpdated(records, updated);
+    appendAuditLogs([
+      {
+        bountyId: id,
+        fromStatus: bounty.status,
+        toStatus: updated.status,
+        transition: "resolve_dispute",
+        actor: arbiter,
+        metadata: {
+          release,
+          transactionHash: transactionHash?.trim() || undefined,
+        },
+      },
+    ]);
+    await invalidateBountyCache();
 
     return persisted;
   });
