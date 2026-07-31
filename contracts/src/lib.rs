@@ -922,6 +922,24 @@ impl StellarBountyBoardContract {
                 bounty_count: 0,
             })
     }
+}
+
+fn accumulate_fee_stats(env: &Env, fee_amount: i128) {
+    if fee_amount > 0 {
+        let mut stats: FeeStats = env
+            .storage()
+            .persistent()
+            .get(&DataKey::FeeStats)
+            .unwrap_or(FeeStats {
+                total_collected: 0,
+                bounty_count: 0,
+            });
+        stats.total_collected += fee_amount;
+        stats.bounty_count += 1;
+        env.storage()
+            .persistent()
+            .set(&DataKey::FeeStats, &stats);
+    }
 
     /// Returns the effective dispute window for a bounty.
     /// If the bounty has a per-bounty override, returns that value.

@@ -18,10 +18,10 @@ fn test_get_version_matches_cargo_toml() {
     let client = StellarBountyBoardContractClient::new(&env, &contract_id);
 
     let version = client.get_version();
-    let expected = env!("CARGO_PKG_VERSION");
+    let expected = String::from_str(&env, env!("CARGO_PKG_VERSION"));
 
     assert_eq!(
-        version.to_string(),
+        version,
         expected,
         "get_version() should return the semver from Cargo.toml"
     );
@@ -541,6 +541,11 @@ fn test_cancel_bounty_success() {
     assert_eq!(bounty.status, BountyStatus::Refunded);
     assert_eq!(token.balance(&maintainer), 1000);
     assert_eq!(token.balance(&client.address), 0);
+
+    let events = env.events().all().filter_by_contract(&client.address);
+    let event_count = events.events().len();
+    assert!(event_count >= 2, "Expected at least BountyCreated + BountyCanceled events, got {event_count}");
+    assert!(events.events().last().is_some(), "At least one event should be present after filter");
 }
 
 #[test]
@@ -931,6 +936,48 @@ fn test_double_reserve_bounty() {
     // Second reservation attempt should panic with Error::BountyNotOpen
     // because the bounty is no longer in Open status
     client.reserve_bounty(&bounty_id, &contributor);
+}
+
+#[test]
+#[should_panic(expected = "BountyNotOpen")]
+fn test_concurrent_reserve_two_contributors() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (client, maintainer, contributor1, token_id, _, _) = setup_test(&env);
+    let contributor2 = Address::generate(&env);
+    let token_admin = soroban_sdk::token::StellarAssetClient::new(&env, &token_id);
+    token_admin.mint(&maintainer, &1000);
+
+    let bounty_id = client.create_bounty(
+        &maintainer,
+        &token_id,
+        &500,
+        &String::from_str(&env, "repo"),
+        &1,
+        &String::from_str(&env, "title"),
+        &(env.ledger().timestamp() + 1000),
+        &0u32,
+    );
+
+    // First contributor reserves — should succeed and transition to Reserved
+    client.reserve_bounty(&bounty_id, &contributor1);
+    let bounty = client.get_bounty(&bounty_id);
+    assert_eq!(bounty.status, BountyStatus::Reserved, "First reserve should transition to Reserved");
+    assert_eq!(
+        bounty.contributor,
+        Some(contributor1.clone()),
+        "Contributor should be set to the first caller"
+    );
+    assert_ne!(
+        bounty.contributor,
+        Some(contributor2.clone()),
+        "Contributor should NOT be the second caller"
+    );
+
+    // Second contributor tries to reserve the same bounty — should fail
+    // with a clear BountyNotOpen error rather than panicking generically
+    client.reserve_bounty(&bounty_id, &contributor2);
 }
 
 #[test]
