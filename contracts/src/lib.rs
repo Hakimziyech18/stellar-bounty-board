@@ -60,16 +60,6 @@ pub struct AllowlistConfig {
     pub allowed_tokens: Vec<Address>,
 }
 
-impl Default for AllowlistConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            allowed_tokens: Vec::new(),
-        }
-    }
-}
-
-
 /// Cumulative fee statistics updated on every payout release.
 #[contracttype]
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -84,8 +74,7 @@ pub struct FeeStats {
 enum DataKey {
     NextBountyId,
     Bounty(u64),
-    Config,
-    PendingResolution(u64),
+
 }
 
 #[contracttype]
@@ -109,6 +98,14 @@ pub struct BountyReserved {
 
 #[contracttype]
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BountyReassigned {
+    pub bounty_id: u64,
+    pub old_contributor: Address,
+    pub new_contributor: Address,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BountySubmitted {
     pub bounty_id: u64,
     pub contributor: Address,
@@ -119,7 +116,7 @@ pub struct BountySubmitted {
 pub struct BountyReleased {
     pub bounty_id: u64,
     pub contributor: Address,
-    pub amount: i128,     // net payout after fee
+    pub amount: i128,      // net payout after fee
     pub fee_amount: i128, // how much went to fee recipient
 }
 
@@ -174,9 +171,7 @@ pub struct ContractUnpaused {
 }
 
 #[contracttype]
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct DisputeAppealed {
-    pub bounty_id: u64,
+
 }
 
 #[contract]
@@ -338,6 +333,9 @@ impl StellarBountyBoardContract {
         if protocol_fee_bps > 0 && !env.storage().persistent().has(&DataKey::FeeRecipient) {
             panic_error(ContractError::FeeRecipientNotSet);
         }
+        if !is_token_allowed(&env, token.clone()) {
+            panic_error(ContractError::TokenNotAllowed);
+        }
 
         // Validate dispute window override if provided
         if let Some(override_value) = dispute_window_override {
@@ -421,6 +419,43 @@ impl StellarBountyBoardContract {
             BountyReserved {
                 bounty_id,
                 contributor,
+            },
+        );
+    }
+
+    pub fn reassign_bounty(
+        env: Env,
+        bounty_id: u64,
+        maintainer: Address,
+        new_contributor: Address,
+    ) {
+        maintainer.require_auth();
+
+        let mut bounty = read_bounty(&env, bounty_id);
+        expire_if_needed(&env, &mut bounty);
+
+        if bounty.maintainer != maintainer {
+            panic_error(ContractError::MaintainerMismatch);
+        }
+
+        if bounty.status != BountyStatus::Reserved {
+            panic_error(ContractError::BountyMustBeReserved);
+        }
+
+        let old_contributor = bounty
+            .contributor
+            .clone()
+            .unwrap_or_else(|| panic_error(ContractError::MissingContributor));
+
+        bounty.contributor = Some(new_contributor.clone());
+        write_bounty(&env, bounty_id, &bounty);
+
+        env.events().publish(
+            (symbol_short!("Bounty"), symbol_short!("Reassign")),
+            BountyReassigned {
+                bounty_id,
+                old_contributor,
+                new_contributor,
             },
         );
     }
@@ -943,31 +978,6 @@ impl StellarBountyBoardContract {
     ///
     /// Returns a [`FeeStats`] with `total_collected = 0` and `bounty_count = 0`
     /// if no bounties have been released yet.
-
-    /// Returns all bounties assigned to a given contributor.
-    pub fn get_bounties_by_contributor(env: Env, contributor: Address, start: u64, limit: u32) -> Vec<Bounty> {
-        let enforced_limit = if limit > 50 { 50 } else { limit };
-        let mut result = Vec::new(&env);
-        let next_id = env.storage().persistent().get(&DataKey::NextBountyId).unwrap_or(0);
-        if start == 0 || start > next_id || enforced_limit == 0 {
-            return result;
-        }
-        let mut id = start;
-        let mut count = 0u32;
-        while count < enforced_limit && id <= next_id {
-            if env.storage().persistent().has(&DataKey::Bounty(id)) {
-                let mut bounty = read_bounty(&env, id);
-                expire_if_needed(&env, &mut bounty);
-                if bounty.contributor == Some(contributor.clone()) {
-                    result.push_back(bounty);
-                    count += 1;
-                }
-            }
-            id += 1;
-        }
-        result
-    }
-
     pub fn get_fee_stats(env: Env) -> FeeStats {
         env.storage()
             .persistent()
@@ -1076,8 +1086,70 @@ fn accumulate_fee_stats(env: &Env, fee_amount: i128) {
             },
         );
     }
-} main
+
+    /// Admin: set allowlist enabled state
+    pub fn set_allowlist_enabled(env: Env, admin: Address, enabled: bool) {
+        let stored_admin: Address = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Admin)
+            .unwrap_or_else(|| panic_error(ContractError::NotAdmin));
+        if admin != stored_admin {
+            panic_error(ContractError::NotAdmin);
+        }
+        admin.require_auth();
+        let mut config = get_allowlist_config(&env);
+        config.enabled = enabled;
+        env.storage().instance().set(&DataKey::AllowlistConfig, &config);
+    }
+
+    /// Admin: add a token to the allowlist
+    pub fn add_allowed_token(env: Env, admin: Address, token: Address) {
+        let stored_admin: Address = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Admin)
+            .unwrap_or_else(|| panic_error(ContractError::NotAdmin));
+        if admin != stored_admin {
+            panic_error(ContractError::NotAdmin);
+        }
+        admin.require_auth();
+        let mut config = get_allowlist_config(&env);
+        if !config.allowed_tokens.contains(&token) {
+            config.allowed_tokens.push_back(token.clone());
+            env.storage().instance().set(&DataKey::AllowlistConfig, &config);
+            env.events().publish(
+                (symbol_short!("allowlist"), symbol_short!("add")),
+                token,
+            );
+        }
+    }
+
+    /// Admin: remove a token from the allowlist
+    pub fn remove_allowed_token(env: Env, admin: Address, token: Address) {
+        let stored_admin: Address = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Admin)
+            .unwrap_or_else(|| panic_error(ContractError::NotAdmin));
+        if admin != stored_admin {
+            panic_error(ContractError::NotAdmin);
+        }
+        admin.require_auth();
+        let mut config = get_allowlist_config(&env);
+        
+        if let Some(index) = config.allowed_tokens.first_index_of(&token) {
+            config.allowed_tokens.remove(index);
+            env.storage().instance().set(&DataKey::AllowlistConfig, &config);
+            env.events().publish(
+                (symbol_short!("allowlist"), symbol_short!("remove")),
+                token,
+            );
+        }
+    }
 }
+
+// ─── Helper Functions ────────────────────────────────────────────────────────
 
 fn read_bounty(env: &Env, bounty_id: u64) -> Bounty {
     env.storage()
@@ -1099,67 +1171,25 @@ fn expire_if_needed(env: &Env, bounty: &mut Bounty) {
     {
         bounty.status = BountyStatus::Expired;
     }
+}
+
+fn get_allowlist_config(env: &Env) -> AllowlistConfig {
+    env.storage()
+        .instance()
+        .get::<_, AllowlistConfig>(&DataKey::AllowlistConfig)
+        .unwrap_or_else(|| AllowlistConfig {
+            enabled: false,
+            allowed_tokens: Vec::new(env),
+        })
+}
 
 /// Check if a token is allowed to fund bounties
-fn is_token_allowed(e: &Env, token: &Address) -> bool {
-    e.storage()
-        .instance()
-        .get::<_, AllowlistConfig>(&DataKey::AllowlistConfig)
-        .map(|config| {
-            if !config.enabled {
-                return true;
-            }
-            config.allowed_tokens.contains(token)
-        })
-        .unwrap_or(true) // No config = allow all
-}
-
-/// Admin: set allowlist enabled state
-pub fn set_allowlist_enabled(e: &Env, admin: Address, enabled: bool) {
-    admin.require_auth();
-    let mut config = e.storage()
-        .instance()
-        .get::<_, AllowlistConfig>(&DataKey::AllowlistConfig)
-        .unwrap_or_default();
-    config.enabled = enabled;
-    e.storage().instance().set(&DataKey::AllowlistConfig, &config);
-}
-
-/// Admin: add a token to the allowlist
-pub fn add_allowed_token(e: &Env, admin: Address, token: Address) {
-    admin.require_auth();
-    let mut config = e.storage()
-        .instance()
-        .get::<_, AllowlistConfig>(&DataKey::AllowlistConfig)
-        .unwrap_or_default();
-    if !config.allowed_tokens.contains(&token) {
-        config.allowed_tokens.push(token);
-        e.storage().instance().set(&DataKey::AllowlistConfig, &config);
-        e.events().publish(
-            (symbol_short!("allowlist"), symbol_short!("add")),
-            token,
-        );
+fn is_token_allowed(env: &Env, token: Address) -> bool {
+    let config = get_allowlist_config(env);
+    if !config.enabled {
+        return true;
     }
-}
-
-/// Admin: remove a token from the allowlist
-pub fn remove_allowed_token(e: &Env, admin: Address, token: Address) {
-    admin.require_auth();
-    let mut config = e.storage()
-        .instance()
-        .get::<_, AllowlistConfig>(&DataKey::AllowlistConfig)
-        .unwrap_or_default();
-    let before = config.allowed_tokens.len();
-    config.allowed_tokens.retain(|t| t != &token);
-    if config.allowed_tokens.len() < before {
-        e.storage().instance().set(&DataKey::AllowlistConfig, &config);
-        e.events().publish(
-            (symbol_short!("allowlist"), symbol_short!("remove")),
-            token,
-        );
-    }
-}
-
+    config.allowed_tokens.contains(token)
 }
 
 /// Atomically add `fee_amount` to the cumulative [`FeeStats`] in persistent storage.
@@ -1176,21 +1206,10 @@ fn accumulate_fee_stats(env: &Env, fee_amount: i128) {
             total_collected: 0,
             bounty_count: 0,
         });
-    stats.total_collected += fee_amount;
-    stats.bounty_count += 1;
-    env.storage().persistent().set(&DataKey::FeeStats, &stats);
-}
 
-fn accumulate_fee_stats(env: &Env, fee_amount: i128) {
-    let mut stats: FeeStats = env
-        .storage()
-        .persistent()
-        .get(&DataKey::FeeStats)
-        .unwrap_or(FeeStats {
-            total_collected: 0,
-            bounty_count: 0,
-        });
     stats.total_collected += fee_amount;
     stats.bounty_count += 1;
+
     env.storage().persistent().set(&DataKey::FeeStats, &stats);
+
 }
